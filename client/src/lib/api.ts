@@ -31,6 +31,10 @@ export const api = {
     summary: () => fetch(`${ENDPOINTS.fl}/summary`, { headers: authHeaders() }).then(json),
     predict: (body: unknown) => fetch(`${ENDPOINTS.fl}/predict`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(body) }).then(json),
     customers: (query: Record<string, string>) => fetch(`${ENDPOINTS.fl}/customers?${new URLSearchParams(query)}`, { headers: authHeaders() }).then(json),
+    citizen: (runId?: string) => fetch(`${ENDPOINTS.fl}/citizen${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
+    fairness: (runId?: string) => fetch(`${ENDPOINTS.fl}/fairness${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
+    epsilon: (noise: number, rounds: number) => fetch(`${ENDPOINTS.fl}/epsilon?noise=${noise}&rounds=${rounds}`, { headers: authHeaders() }).then(json),
+    seedGraph: (runId?: string) => fetch(`${ENDPOINTS.fl}/graph/seed`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ run_id: runId }) }).then(json),
     stream: (id: string, onEvent: (event: RoundEvent) => void) => {
       const stream = new EventSource(ENDPOINTS.flStream(id));
       stream.addEventListener("progress", (message) => onEvent(JSON.parse((message as MessageEvent).data)));

@@ -13,7 +13,7 @@ Arth Saathi is a privacy-preserving financial-risk platform for citizens and ban
 | Neo4j | Pseudonymised risk graph | 7474/7687 |
 | MongoDB | Local fallback for users, consent, and audit | 27017 |
 
-The configured MongoDB Atlas URI is used by `server` when present. Docker Compose still starts local MongoDB as a development fallback.
+Direct server runs use the configured MongoDB Atlas URI. Docker Compose defaults to its internal MongoDB for reproducible local development; export `COMPOSE_DB_URI` before `docker compose up` only when you intentionally want Compose to use Atlas.
 
 ## Phase 0 status
 
@@ -26,6 +26,8 @@ Phase 0 provides:
 - Purpose-level consent history, erasure requests, and audit records.
 - Authenticated FL proxy routes and Socket.IO FL progress rooms.
 - Role-aware signup and protected citizen/analyst route scaffolds.
+- A verified six-service Compose stack: client, chatbot gateway, application server, CPU-only ML/FL service, MongoDB, and Neo4j all pass health checks.
+- Non-root application containers and deterministic dependency installation.
 
 ## Phase 1 status
 
@@ -108,6 +110,16 @@ python -m data.partition --dataset gmsc --clients 5 --mode hfl --seed 42
 
 `ARTH_DATA_HASH_KEY` should be a stable secret in deployments. Changing it requires regenerating all processed and partitioned artifacts.
 
+## Python dependency groups
+
+- `requirements.txt` — pinned ML/FL API runtime dependencies.
+- `requirements.lock` — exact verified transitive runtime graph used by Docker.
+- `requirements-data.txt` — optional Kaggle/Hugging Face download tooling.
+- `requirements-augmentation.txt` — optional SDV/CTGAN tooling.
+- `requirements-dev.txt` — local test and data-development tools.
+
+The Docker image installs the official CPU-only PyTorch wheel. Do not replace it with the default Linux ARM wheel on Apple Silicon: that wheel can pull several gigabytes of unusable NVIDIA libraries.
+
 ## Verification
 
 ```bash
@@ -116,4 +128,6 @@ cd ../client && npm run build
 cd .. && docker compose config --quiet
 ```
 
-The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes. Docker runtime health still requires Docker Desktop to be running.
+The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes. With Docker Desktop running, `docker compose ps` should show all six services as healthy.
+
+Non-breaking npm security updates have been applied. Remaining audit findings require breaking upgrades in inherited UI/mail/file-processing dependencies, and `xlsx` has no upstream fix. These are documented rather than hidden with `npm audit fix --force`.

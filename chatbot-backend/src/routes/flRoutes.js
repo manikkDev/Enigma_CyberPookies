@@ -37,11 +37,21 @@ router.post("/predict", ...secured, handle(async (req, res) => {
 
 router.get("/customers", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => {
   const dataset = req.query.dataset || "paysim_banks";
-  if (!req.query.run_id) return res.status(400).json({ error: "run_id is required" });
-  const result = await ml.sample(dataset, req.query.run_id, {
+  const result = await ml.sample(dataset, req.query.run_id || "latest", {
     n: req.query.n || 50,
     client_id: req.user.role === "admin" ? req.query.client_id : req.user.institutionId,
   });
+  res.json(result);
+}));
+
+router.get("/citizen", ...secured, requireRole("citizen"), handle(async (req, res) => {
+  res.json(await ml.citizen(req.user.customerRef || req.user._id, req.query.run_id));
+}));
+router.get("/fairness", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => res.json(await ml.fairness(req.query.run_id))));
+router.get("/epsilon", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => res.json(await ml.epsilon(req.query))));
+router.post("/graph/seed", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => {
+  const result = await ml.seedGraph(req.body.run_id);
+  await audit(req, "graph.seed", req.body.run_id || result.run_id, result);
   res.json(result);
 }));
 

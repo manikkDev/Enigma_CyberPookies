@@ -241,4 +241,85 @@ router.get("/graph/stream", (req, res) => {
   sendData();
 });
 
+router.get("/risk-graph/overview", async (req, res) => {
+  const session = driver.session();
+  try {
+    const minScore = Number(req.query.minScore ?? 0.3);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 400, 1), 400);
+    const result = await session.run(
+      `MATCH (source:Account)-[edge:TRANSFERRED_TO]->(target:Account)
+       WHERE source.risk_score >= $minScore OR target.risk_score >= $minScore
+       RETURN source.pid AS source_id, source.risk_score AS source_score, source.risk_band AS source_band,
+              source.cluster_id AS source_cluster, source.institution_id AS source_institution,
+              target.pid AS target_id, target.risk_score AS target_score, target.risk_band AS target_band,
+              target.cluster_id AS target_cluster, target.institution_id AS target_institution,
+              edge.n_tx AS n_tx, edge.total_amt AS total_amt, edge.avg_risk AS avg_risk
+       ORDER BY edge.avg_risk DESC LIMIT $limit`,
+      { minScore, limit: neo4j.int(limit) },
+    );
+    const nodes = new Map();
+    const edges = result.records.map((record) => {
+      const source = record.get("source_id");
+      const target = record.get("target_id");
+      nodes.set(source, { id: source, score: record.get("source_score"), band: record.get("source_band"), cluster: toNumber(record.get("source_cluster")), institution: toNumber(record.get("source_institution")) });
+      nodes.set(target, { id: target, score: record.get("target_score"), band: record.get("target_band"), cluster: toNumber(record.get("target_cluster")), institution: toNumber(record.get("target_institution")) });
+      return { source, target, n_tx: toNumber(record.get("n_tx")), total_amt: record.get("total_amt"), avg_risk: record.get("avg_risk") };
+    });
+    res.json({ nodes: [...nodes.values()], edges });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+router.get("/risk-graph/campaigns", async (_req, res) => {
+  const session = driver.session();
+  try {
+    const result = await session.run("MATCH (campaign:Campaign) RETURN campaign.id AS id, campaign.label AS label, campaign.size AS size, campaign.avg_score AS avg_score, campaign.n_high AS n_high ORDER BY campaign.n_high DESC, campaign.avg_score DESC LIMIT 25");
+    res.json(result.records.map((record) => ({ id: toNumber(record.get("id")), label: record.get("label"), size: toNumber(record.get("size")), avg_score: record.get("avg_score"), n_high: toNumber(record.get("n_high")) })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+router.get("/risk-graph/campaign/:id", async (req, res) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (account:Account)-[:MEMBER_OF]->(campaign:Campaign {id:$id})
+       OPTIONAL MATCH (account)-[edge:TRANSFERRED_TO]->(target:Account)-[:MEMBER_OF]->(campaign)
+       RETURN account.pid AS id, account.risk_score AS score, account.risk_band AS band,
+              account.institution_id AS institution, target.pid AS target, edge.n_tx AS n_tx, edge.total_amt AS total_amt`,
+      { id: neo4j.int(Number(req.params.id)) },
+    );
+    const nodes = new Map();
+    const edges = [];
+    for (const record of result.records) {
+      const id = record.get("id");
+      nodes.set(id, { id, score: record.get("score"), band: record.get("band"), institution: toNumber(record.get("institution")) });
+      if (record.get("target")) edges.push({ source: id, target: record.get("target"), n_tx: toNumber(record.get("n_tx")), total_amt: record.get("total_amt") });
+    }
+    res.json({ nodes: [...nodes.values()], edges });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
+router.get("/risk-graph/account/:pid/neighbors", async (req, res) => {
+  const session = driver.session();
+  try {
+    const result = await session.run("MATCH (account:Account {pid:$pid})-[edge:TRANSFERRED_TO]-(neighbor:Account) RETURN neighbor.pid AS id, neighbor.risk_score AS score, neighbor.risk_band AS band, edge.n_tx AS n_tx, edge.total_amt AS total_amt LIMIT 50", { pid: req.params.pid });
+    res.json({ center: req.params.pid, neighbors: result.records.map((record) => ({ id: record.get("id"), score: record.get("score"), band: record.get("band"), n_tx: toNumber(record.get("n_tx")), total_amt: record.get("total_amt") })) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
 export default router;

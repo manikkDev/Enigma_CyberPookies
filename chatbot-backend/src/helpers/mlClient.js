@@ -27,4 +27,8 @@ export const ml = {
     const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== null && value !== undefined));
     return request(`/customers/${encodeURIComponent(dataset)}/${encodeURIComponent(runId)}/sample?${params}`);
   },
+  citizen: (customerRef, runId) => request(`/citizen/${encodeURIComponent(customerRef)}${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`),
+  fairness: (runId) => request(`/fairness${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`),
+  epsilon: (query = {}) => request(`/privacy/epsilon?${new URLSearchParams(query)}`),
+  seedGraph: (runId) => request(`/graph/seed${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { method: "POST", headers: internalHeaders() }),
 };

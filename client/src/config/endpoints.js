@@ -30,8 +30,22 @@ export const ENDPOINTS = {
   conversations: `${MAIN_API}/api/conversations`,
   
   // Auth
-  auth: `${MAIN_API}/api/auth`,
-  users: `${MAIN_API}/api/users`,
+  auth: `${GRAPH_API}/api/auth`,
+  users: `${GRAPH_API}/api/users`,
+
+  // Federated learning
+  fl: `${MAIN_API}/api/fl`,
+  flStream: (runId) => `${ML_API}/fl/stream/${runId}`,
+
+  // Risk graph
+  riskGraphOverview: `${GRAPH_API}/api/risk-graph/overview`,
+  riskGraphCampaigns: `${GRAPH_API}/api/risk-graph/campaigns`,
+  riskGraphCampaign: (id) => `${GRAPH_API}/api/risk-graph/campaign/${id}`,
+  riskGraphNeighbors: (pid) => `${GRAPH_API}/api/risk-graph/account/${pid}/neighbors`,
+
+  // Privacy and accountability
+  consent: `${GRAPH_API}/api/consent`,
+  audit: `${GRAPH_API}/api/audit`,
   
   // Threat Analysis
   threats: `${MAIN_API}/api/threats`,

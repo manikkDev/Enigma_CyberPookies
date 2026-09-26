@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arth-fl"
+version = "0.1.0"
+description = "Federated financial risk model for Arth Saathi"
+requires-python = ">=3.10"
+dependencies = [
+  "flwr[simulation]>=1.20,<2.0",
+  "torch>=2.2",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyarrow>=15",
+  "scikit-learn>=1.4",
+  "opacus>=1.5",
+  "httpx>=0.27",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["arth_fl"]
+
+[tool.flwr.app]
+publisher = "arth-saathi"
+
+[tool.flwr.app.components]
+serverapp = "arth_fl.server_app:app"
+clientapp = "arth_fl.client_app:app"
+
+[tool.flwr.app.config]
+run-id = "dev"
+dataset = "paysim_banks"
+task = "fraud"
+num-server-rounds = 50
+fraction-train = 1.0
+fraction-evaluate = 1.0
+local-epochs = 3
+batch-size = 512
+learning-rate = 0.001
+strategy = "fedprox"
+proximal-mu = 0.01
+dp-enabled = false
+dp-noise-multiplier = 1.0
+dp-clipping-norm = 1.0
+dp-delta = 1e-5
+secagg-enabled = false
+model = "resattn"
+hidden-dim = 256
+n-blocks = 3
+n-heads = 4
+dropout = 0.15
+partitions-dir = "data/partitions"
+runs-dir = "runs"
+progress-webhook = ""
+
+[tool.flwr.federations]
+default = "local-sim"
+
+[tool.flwr.federations.local-sim]
+options.num-supernodes = 5
+options.backend.client-resources.num-cpus = 2
+options.backend.client-resources.num-gpus = 0.0
+
+[tool.flwr.federations.local-sim-3]
+options.num-supernodes = 3
+
+[tool.flwr.federations.local-sim-2]
+options.num-supernodes = 2

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const userSchema = new mongoose.Schema(
     {
@@ -18,6 +19,24 @@ const userSchema = new mongoose.Schema(
         password: {
             type: String,
             required: true,
+        },
+        role: {
+            type: String,
+            enum: ['citizen', 'analyst', 'admin'],
+            default: 'citizen',
+            index: true,
+        },
+        institutionId: {
+            type: Number,
+            min: 0,
+            max: 4,
+            default: null,
+        },
+        customerRef: {
+            type: String,
+            unique: true,
+            sparse: true,
+            default: () => crypto.randomBytes(12).toString('hex'),
         },
     },
     {

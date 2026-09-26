@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 
 import { useAuth } from '@/contexts/auth-context';
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export default function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
@@ -16,10 +16,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
     if (!user) {
       router.replace('/login');
+    } else if (allowedRoles && !allowedRoles.includes(user.role)) {
+      router.replace(user.role === 'analyst' || user.role === 'admin' ? '/analyst' : '/citizen');
     } else {
       setIsChecking(false);
     }
-  }, [authLoading, user, router]);
+  }, [allowedRoles, authLoading, user, router]);
 
   if (authLoading || isChecking) {
     return (

@@ -14,13 +14,21 @@ import { toast } from "sonner";
 import { SERVER_URL } from "@/utils/commonHelper";
 
 type User = {
+  _id?: string;
   email: string;
-  role: string;
+  role: "citizen" | "analyst" | "admin";
+  institutionId?: number | null;
+  customerRef?: string | null;
   name?: string;
   username?: string;
   profileImageUrl?: string;
   avatarUrl?: string;
   // Add other user properties as needed
+};
+
+type GoogleOnboarding = {
+  role: "citizen" | "analyst";
+  institutionId?: number | null;
 };
 
 type AuthContextType = {
@@ -32,6 +40,7 @@ type AuthContextType = {
   ) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: (
     code: string,
+    onboarding?: GoogleOnboarding,
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
@@ -55,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("token", jwt);
         setToken(jwt);
       }
-      router.push("/chat");
+      router.push(loggedInUser?.role === "analyst" || loggedInUser?.role === "admin" ? "/analyst" : "/citizen");
     },
     [router],
   );
@@ -64,9 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       try {
         const apiUrl = SERVER_URL;
-        console.log("Attempting login to:", `${apiUrl}/api/users/login`);
-
-        const response = await fetch(`${apiUrl}/api/users/login`, {
+        const response = await fetch(`${apiUrl}/api/auth/login`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -102,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(
-    async (code: string) => {
+    async (code: string, onboarding: GoogleOnboarding = { role: "citizen" }) => {
       try {
         const apiUrl = SERVER_URL;
         const response = await fetch(`${apiUrl}/api/users/google`, {
@@ -112,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             Accept: "application/json",
           },
           credentials: "include",
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, ...onboarding }),
         });
 
         const data = await response.json();

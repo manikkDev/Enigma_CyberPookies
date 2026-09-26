@@ -43,13 +43,5 @@
     "eslint": "^9.39.1",
     "nodemon": "^2.0.22"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Satharva2004/assignment-backend.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Satharva2004/assignment-backend/issues"
-  },
-  "homepage": "https://github.com/Satharva2004/assignment-backend#readme",
-  "description": ""
+  "description": "Arth Saathi AI and federated-risk API gateway"
 }

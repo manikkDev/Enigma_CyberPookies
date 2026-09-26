@@ -1,18 +1,16 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import http from "http";
 import { Server } from "socket.io";
 import connectDB from "./config/db.js";
 import routes from "./routes/index.js";
 
-dotenv.config();
-
 // Connect to database
-connectDB();
+await connectDB();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 
 // Middleware
 const allowedOrigins = [
@@ -60,6 +58,9 @@ app.set("io", io);
 app.set("userSocketMap", userSocketMap);
 
 io.on("connection", (socket) => {
+  socket.on("fl:subscribe", ({ runId } = {}) => runId && socket.join(`fl:${runId}`));
+  socket.on("fl:unsubscribe", ({ runId } = {}) => runId && socket.leave(`fl:${runId}`));
+
   socket.on("register-user", ({ userId, role, name } = {}) => {
     if (userId) {
       userSocketMap.set(String(userId), socket.id);

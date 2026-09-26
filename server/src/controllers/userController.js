@@ -3,14 +3,24 @@ import { signToken } from "../utils/jwt.js";
 import { google } from "googleapis";
 import crypto from "crypto";
 
-const generateToken = (id) => signToken({ id }, { expiresIn: "30d" });
+const generateToken = (user) => signToken(
+  { id: user._id, role: user.role, institutionId: user.institutionId },
+  { expiresIn: process.env.JWT_EXPIRES_IN || "30d" },
+);
 
 // @desc    Google login/signup (simple)
 // @route   POST /api/users/google
 // @access  Public
 export const googleAuth = async (req, res) => {
   try {
-    const { name, email, password, code } = req.body || {};
+    const { name, email, password, code, role = "citizen", institutionId = null } = req.body || {};
+    if (!["citizen", "analyst"].includes(role)) {
+      return res.status(400).json({ message: "Role must be citizen or analyst" });
+    }
+    const normalizedInstitutionId = role === "analyst" ? Number(institutionId) : null;
+    if (role === "analyst" && (!Number.isInteger(normalizedInstitutionId) || normalizedInstitutionId < 0 || normalizedInstitutionId > 4)) {
+      return res.status(400).json({ message: "Bank employees must select an institution from 0 to 4" });
+    }
 
     let resolvedName = name;
     let resolvedEmail = email;
@@ -57,6 +67,8 @@ console.log("fwefweiofjw");
         name: resolvedName,
         email: resolvedEmail,
         password: resolvedPassword,
+        role,
+        institutionId: normalizedInstitutionId,
       });
     }
 
@@ -65,8 +77,11 @@ console.log("fwefweiofjw");
         _id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
+        institutionId: user.institutionId,
+        customerRef: user.customerRef,
       },
-      token: generateToken(user._id),
+      token: generateToken(user),
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });

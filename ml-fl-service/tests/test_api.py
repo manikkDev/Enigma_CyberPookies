@@ -1,0 +1,14 @@
+from fastapi.testclient import TestClient
+
+from app import app
+
+
+def test_health() -> None:
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "service": "ml-fl-service",
+        "phase": 0,
+        "port": 8000,
+    }

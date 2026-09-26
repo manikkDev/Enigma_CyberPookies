@@ -22,6 +22,7 @@ import metricsRouter from "./routes/metricsRoutes.js";
 import emailRouter from "./routes/emailRoutes.js";
 import smsRouter from "./routes/smsRoutes.js";
 import socialRouter from "./routes/socialRoutes.js";
+import flRouter from "./routes/flRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -121,8 +122,12 @@ app.use("/api/metrics", metricsRouter); // Platform metrics and analytics
 app.use("/api/email", emailRouter);     // Real-time email monitoring
 app.use("/api/sms", smsRouter);         // Real-time SMS monitoring
 app.use("/api/social", socialRouter);   // Real-time social media monitoring
+app.use("/api/fl", flRouter);
 
 // Health check
+app.get("/health", (req, res) => {
+  res.json({ ok: true, service: "chatbot-backend", phase: 0 });
+});
 app.get("/", (req, res) => {
   res.send("✅ API service is running");
 });

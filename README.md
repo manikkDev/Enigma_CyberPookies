@@ -1,81 +1,84 @@
 # Arth Saathi
 
-Full-stack AI assistant platform: a Next.js frontend, a primary Node/Express backend with AI-powered chat and analysis pipelines, and a secondary Express service for graph data and realtime features.
+Arth Saathi is a privacy-preserving financial-risk platform for citizens and bank analysts. It combines a Next.js application, MongoDB-backed identity and consent APIs, a chatbot/API gateway, Neo4j graph infrastructure, and a Python Flower service for cross-institution federated learning.
 
----
+## Services
 
-## Project Structure
+| Service | Purpose | Port |
+|---|---|---:|
+| `client` | Next.js citizen and analyst web application | 3000 |
+| `chatbot-backend` | Copilot and authenticated ML/FL gateway | 5001 |
+| `server` | Identity, consent, audit, Neo4j, and Socket.IO | 5002 |
+| `ml-fl-service` | FastAPI and Flower ML/FL runtime | 8000 |
+| Neo4j | Pseudonymised risk graph | 7474/7687 |
+| MongoDB | Local fallback for users, consent, and audit | 27017 |
 
-```
-├── client/            # Next.js frontend (port 3000)
-├── chatbot-backend/   # Main backend — chat, auth, analysis, alerts, cases, SSE (port 5001)
-└── server/            # Secondary backend — auth/users, Neo4j graph APIs, Socket.IO (port 5002)
-```
+The configured MongoDB Atlas URI is used by `server` when present. Docker Compose still starts local MongoDB as a development fallback.
 
----
+## Phase 0 status
 
-## Prerequisites
+Phase 0 provides:
 
-- Node.js 18+
-- npm (or bun)
-- MongoDB (for `server`)
-- Neo4j (for graph endpoints in `server`)
-- Supabase project (for `chatbot-backend`)
+- A Python 3.11 FastAPI/Flower project scaffold and `/health` endpoint.
+- Dockerfiles, Docker Compose orchestration, health checks, and Make targets.
+- MongoDB JWT identity with `citizen`, `analyst`, and `admin` roles.
+- Institution-scoped analysts (`institutionId` 0–4) and pseudonymous citizen references.
+- Purpose-level consent history, erasure requests, and audit records.
+- Authenticated FL proxy routes and Socket.IO FL progress rooms.
+- Role-aware signup and protected citizen/analyst route scaffolds.
 
----
+Dataset preparation and model training begin in Phase 1 and Phase 2. The complete architecture and phase contracts are in `IMPLEMENTATION_PLAN.md`.
 
-## Environment Setup
+## Requirements
 
-### `chatbot-backend/.env`
+- Docker Desktop with Compose, or Node.js 20+ and Python 3.11+
+- MongoDB Atlas/local MongoDB
+- Neo4j local/Aura
+- API keys used by the existing copilot features
 
-```bash
-PORT=5001
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-GEMINI_API_KEY=your_gemini_api_key
-GROQ_KEY=your_groq_api_key
-```
+## Environment
 
-### `server/.env`
-
-```bash
-PORT=5002
-DB_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-NEO4J_URI=neo4j://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_neo4j_password
-```
-
-### `client/.env` (optional — defaults to localhost)
+Copy the templates and replace every placeholder. Never commit `.env` files.
 
 ```bash
-MAIN_API_URL=http://localhost:5001
-NEXT_PUBLIC_MAIN_API_URL=http://localhost:5001
-NEXT_PUBLIC_GRAPH_API_URL=http://localhost:5002
-NEXT_PUBLIC_ML_API_URL=http://localhost:8000
+cp server/.env.example server/.env
+cp chatbot-backend/.env.example chatbot-backend/.env
+cp client/.env.example client/.env
+cp ml-fl-service/.env.example ml-fl-service/.env
 ```
 
----
+`JWT_SECRET` MUST match between `server` and `chatbot-backend`. `NODE_INTERNAL_TOKEN` MUST match across `server`, `chatbot-backend`, and `ml-fl-service`.
 
-## Running Locally
+## Run with Docker
 
 ```bash
-# Terminal 1 — main backend
-cd chatbot-backend && npm install && npm run dev
-
-# Terminal 2 — secondary backend
-cd server && npm install && npm run dev
-
-# Terminal 3 — frontend
-cd client && npm install && npm run dev
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+make health
 ```
 
-Then open http://localhost:3000.
+Open `http://localhost:3000`. Service health endpoints:
 
----
+- `http://localhost:5001/health`
+- `http://localhost:5002/api/health`
+- `http://localhost:8000/health`
 
-## Deployment
+## Run services directly
 
-- `client/` includes a `vercel.json` for Vercel deployment.
-- `chatbot-backend/` includes a `Dockerfile`, `ecosystem.config.js` (PM2), and a GitHub Actions workflow (`.github/workflows/ci.yml`) that deploys to a VPS over SSH. Set `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` in your repository secrets to use it, then adjust `APP_PATH` to your server path.
+```bash
+cd server && npm ci && npm run dev
+cd chatbot-backend && npm ci && npm run dev
+cd client && npm ci && npm run dev
+cd ml-fl-service && python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn app:app --reload --port 8000
+```
+
+## Verification
+
+```bash
+cd client && npm run build
+cd ml-fl-service && .venv/bin/pytest -q
+cd .. && docker compose config --quiet
+```
+
+The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes.

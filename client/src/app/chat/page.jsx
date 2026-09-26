@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useMemo, useState, useRef, useEffect } from "react"
+import React, { Suspense, useCallback, useMemo, useState, useRef, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { ChatForm } from "@/components/ui/chat"
 import { CopyButton } from "@/components/ui/copy-button"
@@ -279,7 +279,7 @@ const HeroBackdropCanvas = () => {
   return <canvas ref={canvasRef} className="chat-bg-canvas" />
 }
 
-export default function ChatPage() {
+function ChatPageContent() {
   const { user, token, logout } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState("")
@@ -1644,5 +1644,13 @@ export default function ChatPage() {
         />
       </div>
     </>
+  )
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading chat…</div>}>
+      <ChatPageContent />
+    </Suspense>
   )
 }

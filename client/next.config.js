@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
 // import { SERVER_URL } from "@/utils/commonHelper";
 // const server_url = require("../utils/commonHelper");
 const nextConfig = {
+  outputFileTracingRoot: __dirname,
   eslint: {
     // Warning: This allows production builds to successfully complete even if
     // your project has ESLint errors.

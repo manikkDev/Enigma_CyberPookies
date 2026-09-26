@@ -48,6 +48,8 @@ export function SignupForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"citizen" | "analyst">("citizen");
+  const [institutionId, setInstitutionId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -84,6 +86,11 @@ export function SignupForm({
       return;
     }
 
+    if (role === "analyst" && institutionId === null) {
+      toast.error("Please select your institution");
+      return;
+    }
+
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
       return;
@@ -97,15 +104,17 @@ export function SignupForm({
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/users/register`, {
+      const response = await fetch(`${SERVER_URL}/api/auth/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: username.trim(),
+          name: username.trim(),
           email: email.trim().toLowerCase(),
           password,
+          role,
+          institutionId: role === "analyst" ? institutionId : null,
         }),
       });
 
@@ -200,7 +209,7 @@ export function SignupForm({
             return;
           }
 
-          const result = await loginWithGoogle(response.code);
+          const result = await loginWithGoogle(response.code, { role, institutionId });
           if (!result.success) {
             setIsGoogleLoading(false);
           }
@@ -238,6 +247,32 @@ export function SignupForm({
               required
             />
           </Field>
+          <Field>
+            <FieldLabel>Account type</FieldLabel>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Account type">
+              <Button type="button" variant={role === "citizen" ? "default" : "outline"} aria-pressed={role === "citizen"} onClick={() => { setRole("citizen"); setInstitutionId(null); }}>
+                Citizen
+              </Button>
+              <Button type="button" variant={role === "analyst" ? "default" : "outline"} aria-pressed={role === "analyst"} onClick={() => setRole("analyst")}>
+                Bank employee
+              </Button>
+            </div>
+          </Field>
+          {role === "analyst" && (
+            <Field>
+              <FieldLabel htmlFor="institution">Institution</FieldLabel>
+              <select
+                id="institution"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={institutionId ?? ""}
+                onChange={(event) => setInstitutionId(event.target.value === "" ? null : Number(event.target.value))}
+                required
+              >
+                <option value="">Select your institution</option>
+                {[0, 1, 2, 3, 4].map((id) => <option key={id} value={id}>Bank {id}</option>)}
+              </select>
+            </Field>
+          )}
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
             <Input

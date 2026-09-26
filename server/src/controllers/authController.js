@@ -1,19 +1,38 @@
 import User from '../models/User.js';
 import { signToken } from '../utils/jwt.js';
 
-const generateToken = (id) => {
-    return signToken({ id }, { expiresIn: '30d' });
+const generateToken = (user) => {
+    return signToken(
+        { id: user._id, role: user.role, institutionId: user.institutionId },
+        { expiresIn: process.env.JWT_EXPIRES_IN || '30d' },
+    );
 };
+
+const userResponse = (user) => ({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    institutionId: user.institutionId,
+    customerRef: user.customerRef,
+});
 
 // @desc    Register a new user
 // @route   POST /api/auth/signup
 // @access  Public
 export const signupUser = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, role = 'citizen', institutionId = null } = req.body;
 
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Please provide all required fields' });
+        }
+        if (!['citizen', 'analyst'].includes(role)) {
+            return res.status(400).json({ message: 'Role must be citizen or analyst' });
+        }
+        const normalizedInstitutionId = role === 'analyst' ? Number(institutionId) : null;
+        if (role === 'analyst' && (!Number.isInteger(normalizedInstitutionId) || normalizedInstitutionId < 0 || normalizedInstitutionId > 4)) {
+            return res.status(400).json({ message: 'Bank employees must select an institution from 0 to 4' });
         }
 
         const userExists = await User.findOne({ email });
@@ -26,14 +45,14 @@ export const signupUser = async (req, res) => {
             name,
             email,
             password,
+            role,
+            institutionId: normalizedInstitutionId,
         });
 
         if (user) {
             res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                token: generateToken(user._id),
+                user: userResponse(user),
+                token: generateToken(user),
             });
         } else {
             res.status(400).json({ message: 'Invalid user data received' });
@@ -49,15 +68,16 @@ export const signupUser = async (req, res) => {
 export const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required' });
+        }
 
         const user = await User.findOne({ email });
 
         if (user && (await user.matchPassword(password))) {
             res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                token: generateToken(user._id),
+                user: userResponse(user),
+                token: generateToken(user),
             });
         } else {
             // Return same generic error message for invalid email or password
@@ -76,11 +96,7 @@ export const getUserProfile = async (req, res) => {
         const user = await User.findById(req.user._id);
 
         if (user) {
-            res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-            });
+            res.json(userResponse(user));
         } else {
             res.status(404).json({ message: 'User not found' });
         }

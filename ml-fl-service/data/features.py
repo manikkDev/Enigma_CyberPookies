@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Tuple
@@ -9,12 +8,14 @@ from typing import Iterable, Tuple
 import numpy as np
 import pandas as pd
 
+from settings import settings
+
 from .schema import GMSC, PAYSIM, SCHEMAS, validate_columns
 
 DATA = Path(__file__).resolve().parent
 RAW = DATA / "raw"
 PROCESSED = DATA / "processed"
-HASH_KEY = (os.getenv("ARTH_DATA_HASH_KEY") or "arth-saathi-public-demo-v1").encode()
+HASH_KEY = settings.ARTH_DATA_HASH_KEY.encode()
 
 
 def _pseudonym(value) -> str:

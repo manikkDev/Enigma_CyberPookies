@@ -27,7 +27,20 @@ Phase 0 provides:
 - Authenticated FL proxy routes and Socket.IO FL progress rooms.
 - Role-aware signup and protected citizen/analyst route scaffolds.
 
-Dataset preparation and model training begin in Phase 1 and Phase 2. The complete architecture and phase contracts are in `IMPLEMENTATION_PLAN.md`.
+## Phase 1 status
+
+Phase 1 provides a reproducible, privacy-conscious financial data pipeline:
+
+- Downloads the versioned `flwrlabs/fed-fraud-paysim-banks` Parquet source and records SHA-256 provenance.
+- Explicitly identifies PaySim as synthetic transactions calibrated from aggregated real mobile-money patterns.
+- Excludes source account IDs and the `isFlaggedFraud` target proxy from model-ready data.
+- Generates keyed pseudonymous customer/counterparty IDs and causal transaction, balance, time, and velocity features.
+- Preserves the official 636,262-row test split and partitions 5,726,358 training rows among five natural institutions.
+- Uses deterministic customer-grouped train/validation splits and creates institution-scoped test splits.
+- Supports optional, explicitly labeled SMOTE augmentation on training rows only.
+- Produces `meta.json` and `validation_report.json` evidence covering schema, finite values, disjoint institutions, leakage boundaries, class distributions, and synthetic-data rules.
+
+The generated dataset files are intentionally gitignored. Phase 2 model training consumes the reproducible partition paths. The complete architecture and phase contracts are in `IMPLEMENTATION_PLAN.md`.
 
 ## Requirements
 
@@ -73,12 +86,34 @@ cd client && npm ci && npm run dev
 cd ml-fl-service && python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn app:app --reload --port 8000
 ```
 
+## Phase 1 data pipeline
+
+From `ml-fl-service`, use Python 3.11 or activate the service virtual environment first. The primary download is approximately 276 MiB; generated processed and partition files require additional disk space.
+
+```bash
+source .venv/bin/activate
+python -m data.download --only paysim_banks
+python -m data.features paysim_banks
+python -m data.partition --dataset paysim_banks --clients 5 --mode hfl --seed 42
+python -m data.validate --dataset paysim_banks --clients 5
+```
+
+Equivalent root commands are `make data`, `make partitions`, and `make validate-data`. To prepare Give Me Some Credit as a secondary credit-default dataset, configure Kaggle credentials and run:
+
+```bash
+python -m data.download --only gmsc
+python -m data.features gmsc
+python -m data.partition --dataset gmsc --clients 5 --mode hfl --seed 42
+```
+
+`ARTH_DATA_HASH_KEY` should be a stable secret in deployments. Changing it requires regenerating all processed and partitioned artifacts.
+
 ## Verification
 
 ```bash
-cd client && npm run build
 cd ml-fl-service && .venv/bin/pytest -q
+cd ../client && npm run build
 cd .. && docker compose config --quiet
 ```
 
-The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes.
+The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes. Docker runtime health still requires Docker Desktop to be running.

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = "password"
     PROGRESS_WEBHOOK: str = "http://localhost:5002/api/fl/progress"
     NODE_INTERNAL_TOKEN: str = "change-me"
+    ARTH_DATA_HASH_KEY: str = "arth-saathi-public-demo-v1"
     KAGGLE_USERNAME: Optional[str] = None
     KAGGLE_KEY: Optional[str] = None
 

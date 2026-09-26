@@ -12,3 +12,9 @@ def test_health() -> None:
         "phase": 1,
         "port": 8000,
     }
+
+
+def test_datasets() -> None:
+    response = TestClient(app).get("/datasets")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)

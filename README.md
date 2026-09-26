@@ -48,11 +48,12 @@ The generated dataset files are intentionally gitignored. Phase 2 model training
 
 The platform now implements the full loop end to end:
 
-- **Baselines (Phase 2).** `models/baselines.py` trains one pooled XGBoost model (the "if pooling were legal" ceiling) and one isolated XGBoost per bank on identical per-client sample budgets. Metrics: ROC-AUC, PR-AUC, F1, recall@P90, Brier, ECE → `ml-fl-service/runs/baselines_paysim_banks.json`.
-- **Horizontal FL (Phase 3).** `arth_fl/federated.py` implements synchronous FedAvg/FedProx over the five bank partitions with an MLP(48,24). Raw parquet rows never leave `client_i/` loaders; only parameter deltas and aggregate feature statistics cross. Runs persist `metrics.jsonl` + `summary.json` + `global_model.npz` and are controllable via `/fl/start`, `/fl/stop`, `/fl/status`, `/fl/runs`, `/fl/stream` (SSE).
-- **Privacy (Phase 4).** Per-client update clipping + Gaussian noise on the aggregate, epsilon via Opacus RDP accounting (fallback formula included), pairwise-mask secure-aggregation **simulation** (labeled as such). Measured ε-vs-utility curve at `runs/privacy_tradeoff.json`.
-- **Graph (Phase 5).** `graph/ingest.py` writes only pseudonymous IDs, model scores and aggregated transfer stats into Neo4j; Louvain community detection surfaces fraud-ring campaigns. Authenticated endpoints: `/api/risk-graph/overview|campaigns|campaign/:id|account/:pid/neighbors`.
-- **Serving + UI (Phase 6).** `/predict` (with occlusion-based explanations), `/customers/.../sample`, `/citizen/{ref}`, `/fairness`, all proxied through `chatbot-backend` with JWT + role checks + Mongo audit logging. Analyst pages: overview, FL control with live convergence, risk graph, fairness, customer investigation. Citizen pages: risk profile, DPDP-style consent center, copilot.
+- **Baselines (Phase 2).** `models/baselines.py` trains one pooled XGBoost model (the "if pooling were legal" ceiling), one isolated XGBoost per bank, and **same-class RiskMLP baselines** (pooled + per-bank) so the federated number is compared like-for-like. Metrics: ROC-AUC, PR-AUC, F1, recall@P90, Brier, ECE → `ml-fl-service/runs/baselines_paysim_banks.json`.
+- **Horizontal FL (Phase 3).** `arth_fl/federated.py` implements synchronous **FedAvg / FedProx (true proximal term) / FedAdam (adaptive server)** over the five bank partitions with a torch `RiskMLP(48,24)`. Raw parquet rows never leave `client_i/` loaders; only parameter deltas and aggregate feature statistics cross. Client sampling (`fraction-train`), per-client validation metrics per round, and run history are all supported. Runs persist `metrics.jsonl` + `summary.json` + `global_model.npz` and are controllable via `/fl/start`, `/fl/stop`, `/fl/status`, `/fl/runs`, `/fl/stream` (SSE).
+- **Calibration & scoring.** Post-hoc temperature scaling (`models/calibrate.py`) produces calibrated probabilities; the UI risk score is the **population percentile** of that probability (bands: ≥p95 high, ≥p75 medium), which is honest for a ~0.7% base-rate problem.
+- **Privacy (Phase 4).** Per-client update clipping + Gaussian noise on the aggregate, epsilon via Opacus RDP accounting (`noise_for_target_epsilon` solves a target budget), pairwise-mask secure-aggregation **simulation** (labeled `simulated_pairwise_masks` in every event and the UI). Measured ε-vs-utility curve at `runs/privacy_tradeoff.json`.
+- **Graph (Phase 5).** `graph/features.py` computes degree/PageRank features **per client partition** (each bank only sees its own subgraph); `graph/ingest.py` writes only pseudonymous IDs, model scores and aggregated transfer stats into Neo4j; Louvain community detection surfaces fraud-ring campaigns. Authenticated endpoints: `/api/risk-graph/overview|campaigns|campaign/:id|account/:pid/neighbors`.
+- **Serving + UI (Phase 6).** `/predict` (with occlusion-based explanations), `/customers/.../sample`, `/citizen/{ref}`, `/fairness`, all proxied through `chatbot-backend` with JWT + role checks + consent enforcement + Mongo audit logging. Analyst pages: overview with same-class comparison bars, FL control with live convergence + run history + per-client metrics, interactive risk graph (campaign isolation, neighbor drill-down), fairness, audit log, customer investigation. Citizen pages: consent-gated risk profile, DPDP-style consent center with data export + erasure, risk-persona copilot.
 - **VFL/PSI (Phase 7).** `vertical/psi.py` is a hashed Diffie–Hellman educational PSI simulation; `vertical/run_vfl_demo.py` aligns parties on shared record IDs and measures bank-only vs combined-feature AUC → `runs/vfl_demo/summary.json`.
 
 ## Live demo flow (mentoring session)
@@ -63,17 +64,20 @@ The platform now implements the full loop end to end:
    - **Bank employee**: `analyst@arthsaathi.demo` / `Analyst@123` → lands on `/analyst`, scoped to institution 2.
    - **Citizen**: `citizen@arthsaathi.demo` / `Citizen@123` → lands on `/citizen`.
    You can also sign up manually (`/signup`) and pick "Bank employee" + an institution.
-4. `/analyst/fl` → toggle DP, watch the live ε estimate, start a run, see per-round PR-AUC convergence against the isolated mean.
-5. `/analyst/graph` → Neo4j risk rings (only pseudonymous IDs); click through campaign members.
+4. `/analyst/fl` → pick FedAvg/FedProx/FedAdam, toggle DP (fixed noise or target-ε), set client participation, start a run, and watch per-round PR-AUC converge against the isolated/pooled reference lines plus per-bank validation bars. Run history lists previous runs.
+5. `/analyst/graph` → Neo4j risk rings (only pseudonymous IDs) clustered by detected community; click a campaign to isolate its subgraph, click a node for its derived neighbors, or ask the analyst copilot.
 6. `/analyst/fairness` → per-institution PR-AUC / false-positive-rate spread (operational fairness — PaySim has no demographics).
 7. `/analyst/customers/[id]` → per-account score, occlusion feature contributions, graph neighbours, recommended action.
-8. Open the citizen side with the seeded `citizen@arthsaathi.demo` login → `/citizen` shows a plain-language risk gauge and explanations; `/citizen/consent` exercises purpose toggles + erasure request (DPDP); `/chat` talks to the copilot.
-9. Judges' verification: `curl localhost:5001/api/fl/runs` without a token → 401; `curl localhost:8000/datasets` → partition metadata; `runs/` JSON files reproduce every headline number.
+8. `/analyst/audit` → the MongoDB audit trail: every FL run, prediction, consent change, export and erasure with actor, role and institution.
+9. Open the citizen side with the seeded `citizen@arthsaathi.demo` login → `/citizen` shows a plain-language risk gauge and explanations; `/citizen/consent` exercises purpose toggles (revoking risk scoring immediately pauses scoring), data export, and erasure requests (DPDP); `/chat?mode=risk_citizen` talks to the citizen copilot.
+10. Judges' verification: `curl localhost:5001/api/fl/runs` without a token → 401; `curl localhost:8000/datasets` → partition metadata; `runs/` JSON files reproduce every headline number; `make test` runs the Python suite and `cd server && npm test` runs the API contract tests against the live stack.
 
 ## Honest limitations
 
-- PaySim is **synthetic** mobile-money data; it is nearly separable given the right features, so the isolated-vs-centralized gap is small by construction. Post-transaction balance fields (`newbalance*`, `*_delta`, `*_zero_*`) are excluded from the model as leakage; the demo model uses only pre-transaction observables.
-- The FL model is an MLP trained with FedAvg/FedProx — a different class than the XGBoost baselines, so FL-vs-baseline mixes "model class" and "data sharing" effects. The centralized XGBoost number is a ceiling, not a deployable design.
+- PaySim is **synthetic** mobile-money data; it is nearly separable given the right features, so the isolated-vs-centralized gap is small by construction. Post-transaction balance fields (`newbalance*`, `*_delta`, `*_zero_*`) are excluded from the model as leakage; the demo model uses only pre-transaction observables plus per-client graph features (degree/PageRank computed inside each bank's partition).
+- The headline comparison is now **same-class**: isolated MLP 0.656 → federated FedProx 0.684 → pooled MLP 0.772 (PR-AUC), so the collaboration story is honest within one model family. XGBoost (0.997) is reported only as a theoretical pooled ceiling — it is not the FL model class.
+- FedAdam converges slower at 8 rounds (0.353 PR-AUC) than FedProx — a real, reproducible property of the ladder at this horizon, not a bug; longer budgets change the ordering.
+- The displayed risk score is a **population percentile**, not a probability; calibrated probabilities are reported alongside. With pos_weight training, raw probabilities overstate the ~0.7% base rate, so operational bands are percentile-based.
 - Secure aggregation is a **simulation** of pairwise masking, not production SecAgg. DP numbers are real Opacus RDP accounting, but with only 5 institutions strong ε destroys utility — the tradeoff chart is the honest result.
 - The VFL demo is a benchmark: PSI alignment + a pooled logistic model on aligned features. It is not end-to-end split learning.
 - Neo4j contains only derived, pseudonymised intelligence; `ARTH_DATA_HASH_KEY` must be a private stable secret before any real deployment.
@@ -157,9 +161,10 @@ The Docker image installs the official CPU-only PyTorch wheel. Do not replace it
 ## Verification
 
 ```bash
-cd ml-fl-service && .venv/bin/pytest -q
-cd ../client && npm run build
-cd .. && docker compose config --quiet
+make test                     # 25 Python tests: data, metrics, DP, PSI, model, FL smoke, graph privacy, API
+cd server && npm test         # live contract tests: auth, role guards, consent, export (needs the stack up)
+cd client && npm run build    # production build of all 20 routes
+docker compose config --quiet
 ```
 
 The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes. With Docker Desktop running, `docker compose ps` should show all six services as healthy.

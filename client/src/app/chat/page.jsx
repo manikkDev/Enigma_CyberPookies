@@ -1330,6 +1330,8 @@ function ChatPageContent() {
                   }}
                 >
                   <option value="copilot">Threat Copilot</option>
+                  <option value="risk_analyst">Risk Copilot — Analyst</option>
+                  <option value="risk_citizen">Risk Copilot — Citizen</option>
                   <option value="phishing">Phishing / Impersonation</option>
                   <option value="url">URL / Attachment</option>
                   <option value="campaigns">Misinformation / Campaigns</option>

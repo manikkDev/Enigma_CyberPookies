@@ -1,6 +1,7 @@
 import express from "express";
 
 import { ml } from "../helpers/mlClient.js";
+import { consentState, fetchConsentMe, fetchProfile } from "../helpers/riskContext.js";
 import { audit, authenticate, requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -45,7 +46,14 @@ router.get("/customers", ...secured, requireRole("analyst", "admin"), handle(asy
 }));
 
 router.get("/citizen", ...secured, requireRole("citizen"), handle(async (req, res) => {
-  res.json(await ml.citizen(req.user.customerRef || req.user._id, req.query.run_id));
+  const consentMe = await fetchConsentMe(req);
+  if (consentState(consentMe, "risk_scoring") === "revoked") {
+    await audit(req, "citizen.view_blocked", req.user.id, { reason: "risk_scoring consent revoked" });
+    return res.json({ scoring_disabled: true, purposes: consentMe.purposes });
+  }
+  // customerRef lives on the Mongo user — fetch it from the auth service.
+  const profile = await fetchProfile(req).catch(() => null);
+  res.json(await ml.citizen(profile?.customerRef || req.user.customerRef || req.user.id, req.query.run_id));
 }));
 router.get("/fairness", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => res.json(await ml.fairness(req.query.run_id))));
 router.get("/epsilon", ...secured, requireRole("analyst", "admin"), handle(async (req, res) => res.json(await ml.epsilon(req.query))));

@@ -33,7 +33,8 @@ export const api = {
     customers: (query: Record<string, string>) => fetch(`${ENDPOINTS.fl}/customers?${new URLSearchParams(query)}`, { headers: authHeaders() }).then(json),
     citizen: (runId?: string) => fetch(`${ENDPOINTS.fl}/citizen${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
     fairness: (runId?: string) => fetch(`${ENDPOINTS.fl}/fairness${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
-    epsilon: (noise: number, rounds: number) => fetch(`${ENDPOINTS.fl}/epsilon?noise=${noise}&rounds=${rounds}`, { headers: authHeaders() }).then(json),
+    epsilon: (noise: number, rounds: number, targetEpsilon?: number) =>
+      fetch(`${ENDPOINTS.fl}/epsilon?noise=${noise}&rounds=${rounds}${targetEpsilon ? `&target_epsilon=${targetEpsilon}` : ""}`, { headers: authHeaders() }).then(json),
     seedGraph: (runId?: string) => fetch(`${ENDPOINTS.fl}/graph/seed`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ run_id: runId }) }).then(json),
     stream: (id: string, onEvent: (event: RoundEvent) => void) => {
       const stream = new EventSource(ENDPOINTS.flStream(id));
@@ -51,5 +52,20 @@ export const api = {
     me: () => fetch(`${ENDPOINTS.consent}/me`, { headers: authHeaders() }).then(json),
     set: (purpose: string, granted: boolean) => fetch(ENDPOINTS.consent, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ purpose, granted }) }).then(json),
     erase: () => fetch(`${ENDPOINTS.consent}/erase-request`, { method: "POST", headers: authHeaders() }).then(json),
+    exportData: async () => {
+      const response = await fetch(`${ENDPOINTS.consent}/export`, { headers: authHeaders() });
+      const body = await json(response);
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `arth-saathi-data-export-${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      return body;
+    },
+  },
+  audit: {
+    list: (limit = 100) => fetch(`${ENDPOINTS.audit}?limit=${limit}`, { headers: authHeaders() }).then(json),
   },
 };

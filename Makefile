@@ -1,7 +1,6 @@
 PYTHON ?= .venv/bin/python
-FLWR ?= .venv/bin/flwr
 
-.PHONY: up down logs health data partitions validate-data vfl-partitions baseline fl fl-dp experiments test
+.PHONY: up down logs health data partitions validate-data vfl-partitions graph-features baseline fl fl-dp experiments seed test
 up:
 	docker compose up -d --build
 down:
@@ -20,13 +19,17 @@ validate-data:
 	cd ml-fl-service && $(PYTHON) -m data.validate --dataset paysim_banks --clients 5
 vfl-partitions:
 	cd ml-fl-service && $(PYTHON) -m data.partition --dataset paysim_banks --mode vfl --seed 42
+graph-features:
+	cd ml-fl-service && $(PYTHON) -m graph.features
 baseline:
 	cd ml-fl-service && $(PYTHON) -m models.baselines --dataset paysim_banks
 fl:
-	cd ml-fl-service && $(FLWR) run . local-sim --stream
+	cd ml-fl-service && $(PYTHON) -m experiments.fl_run --strategy fedprox --rounds 8
 fl-dp:
-	cd ml-fl-service && $(FLWR) run . local-sim --run-config "dp-enabled=true dp-noise-multiplier=1.0" --stream
+	cd ml-fl-service && $(PYTHON) -m experiments.fl_run --strategy fedprox --rounds 8 --dp-enabled --dp-noise-multiplier 0.45 --dp-clipping-norm 2.0
 experiments:
 	cd ml-fl-service && $(PYTHON) -m experiments.run_matrix && $(PYTHON) -m experiments.report
+seed:
+	cd ml-fl-service && $(PYTHON) -m experiments.seed_demo
 test:
 	cd ml-fl-service && $(PYTHON) -m pytest -q

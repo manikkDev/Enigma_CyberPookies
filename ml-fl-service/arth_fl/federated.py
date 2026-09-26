@@ -85,7 +85,7 @@ def run_federated(config, stop_event=None):
     clip = float(config.get("dp-clipping-norm", 2.0))
     secagg = bool(config.get("secagg-enabled", True))
     seed = int(config.get("seed", 42))
-    server_lr = float(config.get("server-lr", 0.5))
+    server_lr = float(config.get("server-lr", 0.05))
 
     noise = float(config.get("dp-noise-multiplier", 0.45))
     target_epsilon = config.get("target-epsilon")

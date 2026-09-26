@@ -36,7 +36,7 @@ class FLStartRequest(BaseModel):
     secagg_enabled: bool = True
     fraction_train: float = Field(1.0, gt=0, le=1.0)
     proximal_mu: float = Field(0.05, ge=0)
-    server_lr: float = Field(0.5, gt=0)
+    server_lr: float = Field(0.05, gt=0)
     learning_rate: float = Field(3e-3, gt=0)
     batch_size: int = Field(512, ge=16, le=8192)
     client_sample_cap: int = Field(60000, ge=1000)
@@ -104,7 +104,10 @@ def stop_federated(run_id: str):
 
 @app.get("/fl/status/{run_id}")
 def federated_status(run_id: str):
-    return jobs.status(run_id)
+    status = jobs.status(run_id)
+    if status["status"] == "unknown":
+        raise HTTPException(404, "run not found: {}".format(run_id))
+    return status
 
 
 @app.get("/fl/runs")

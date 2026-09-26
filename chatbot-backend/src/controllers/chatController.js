@@ -13,6 +13,7 @@ import {
 import { searchImages } from "../helpers/imageSearch.js";
 import { buildAmlAssistantPrompt } from "../prompts/FinancialAI.js";
 import { buildCopilotPrompt, resolveInvestigationMode } from "../prompts/copilotPrompt.js";
+import { buildRiskContext } from "../helpers/riskContext.js";
 import YouTubeMCP from "../helpers/youtubeSearch.js";
 import env from "../config/env.js";
 import { processMermaidBlocks } from "../helpers/mermaid.js";
@@ -773,7 +774,11 @@ export async function handleChatStreamGenerate(req, res) {
 
     // Mode-aware system prompt — supports multi-domain copilot + legacy AML
     const investigationMode = resolveInvestigationMode(options.investigationMode || options.mode);
-    const analysisContext = options.analysisContext || null;
+    let analysisContext = options.analysisContext || null;
+    if (!analysisContext && (investigationMode === "risk_analyst" || investigationMode === "risk_citizen")) {
+      // Inject live platform context so the copilot quotes real metrics.
+      analysisContext = await buildRiskContext(req, investigationMode).catch(() => null);
+    }
     const systemPrompt = options.systemPrompt
       || buildCopilotPrompt(investigationMode, username, analysisContext);
     const uploadContext = uploadedText ? uploadedText.slice(0, 400) : "";

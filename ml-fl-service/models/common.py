@@ -7,7 +7,9 @@ import pandas as pd
 from data.schema import SCHEMAS
 
 TYPE_VOCAB = ["CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"]
-MODEL_NUMERIC = ["amount", "amt_log", "amt_to_bal_ratio", "oldbalanceOrg", "oldbalanceDest", "hour", "is_night", "orig_tx_count_24", "orig_amt_sum_24"]
+MODEL_NUMERIC = ["amount", "amt_log", "amt_to_bal_ratio", "oldbalanceOrg", "oldbalanceDest",
+                 "hour", "is_night", "orig_tx_count_24", "orig_amt_sum_24",
+                 "dest_in_degree", "dest_out_degree", "orig_pagerank"]
 
 
 def numeric_columns(schema):

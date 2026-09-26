@@ -11,12 +11,13 @@ from sklearn.preprocessing import StandardScaler
 
 from data.schema import SCHEMAS
 from models.common import save_json
+from settings import settings
 from vertical.psi import Party, intersect_many
 
 
 def run(dataset="paysim_banks", sample_cap=12000, seed=42):
     schema = SCHEMAS[dataset]
-    source = pd.read_parquet(Path("data/partitions") / dataset / "hfl_5" / "client_0" / "train.parquet")
+    source = pd.read_parquet(Path(settings.PARTITIONS_DIR) / dataset / "hfl_5" / "client_0" / "train.parquet")
     positives = source[source[schema.target] == 1]
     negatives = source[source[schema.target] == 0].sample(min(sample_cap - len(positives), len(source) - len(positives)), random_state=seed)
     frame = pd.concat([positives, negatives]).sample(frac=1, random_state=seed).reset_index(drop=True)
@@ -41,7 +42,7 @@ def run(dataset="paysim_banks", sample_cap=12000, seed=42):
     bank_auc = evaluate(bank_features)
     vfl_auc = evaluate(combined)
     result = {"aligned_n": len(common), "bank_only_auc": bank_auc, "vfl_auc": vfl_auc, "gain": vfl_auc - bank_auc, "psi": "hashed Diffie-Hellman educational simulation", "training": "aligned multi-party feature collaboration benchmark"}
-    save_json(Path("runs") / "vfl_demo" / "summary.json", result)
+    save_json(Path(settings.RUNS_DIR) / "vfl_demo" / "summary.json", result)
     return result
 
 

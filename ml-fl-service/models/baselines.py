@@ -9,6 +9,7 @@ import xgboost as xgb
 from data.schema import SCHEMAS
 from models.common import sample_frame, save_json, xy
 from models.metrics import all_metrics
+from settings import settings
 
 
 def fit_model(train, validation, key, seed=42):
@@ -33,7 +34,7 @@ def fit_model(train, validation, key, seed=42):
     return model
 
 
-def run(key="paysim_banks", clients=5, train_cap=150000, test_cap=200000, runs_dir="runs", seed=42):
+def run(key="paysim_banks", clients=5, train_cap=150000, test_cap=200000, runs_dir=None, seed=42):
     schema = SCHEMAS[key]
     root = Path("data/partitions") / key / "hfl_{}".format(clients)
     test = sample_frame(pd.read_parquet(root / "test.parquet"), schema.target, test_cap, seed)
@@ -61,7 +62,7 @@ def run(key="paysim_banks", clients=5, train_cap=150000, test_cap=200000, runs_d
         "isolated_mean": isolated_mean,
         "gap": {"pr_auc": centralized["pr_auc"] - isolated_mean["pr_auc"], "roc_auc": centralized["roc_auc"] - isolated_mean["roc_auc"]},
     }
-    output = Path(runs_dir)
+    output = Path(runs_dir or settings.RUNS_DIR)
     output.mkdir(parents=True, exist_ok=True)
     central.save_model(output / "centralized_{}.json".format(key))
     save_json(output / "baselines_{}.json".format(key), result)

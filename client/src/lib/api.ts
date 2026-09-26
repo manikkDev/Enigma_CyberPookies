@@ -42,10 +42,10 @@ export const api = {
     },
   },
   graph: {
-    overview: (minScore = 0.3, limit = 400) => fetch(`${ENDPOINTS.riskGraphOverview}?minScore=${minScore}&limit=${limit}`).then(json),
-    campaigns: () => fetch(ENDPOINTS.riskGraphCampaigns).then(json),
-    campaign: (id: number) => fetch(ENDPOINTS.riskGraphCampaign(id)).then(json),
-    neighbors: (pid: string) => fetch(ENDPOINTS.riskGraphNeighbors(pid)).then(json),
+    overview: (minScore = 0.3, limit = 400) => fetch(`${ENDPOINTS.riskGraphOverview}?minScore=${minScore}&limit=${limit}`, { headers: authHeaders() }).then(json),
+    campaigns: () => fetch(ENDPOINTS.riskGraphCampaigns, { headers: authHeaders() }).then(json),
+    campaign: (id: number) => fetch(ENDPOINTS.riskGraphCampaign(id), { headers: authHeaders() }).then(json),
+    neighbors: (pid: string) => fetch(ENDPOINTS.riskGraphNeighbors(pid), { headers: authHeaders() }).then(json),
   },
   consent: {
     me: () => fetch(`${ENDPOINTS.consent}/me`, { headers: authHeaders() }).then(json),

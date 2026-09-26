@@ -123,13 +123,36 @@ def summary():
     runs_root = Path(settings.RUNS_DIR)
     baseline_path = runs_root / "baselines_paysim_banks.json"
     vfl_path = runs_root / "vfl_demo" / "summary.json"
+    tradeoff_path = runs_root / "privacy_tradeoff.json"
     runs = available_runs()
+    latest = None
+    try:
+        _, latest = resolve_run()
+    except FileNotFoundError:
+        latest = {key: value for key, value in runs[0].items() if key != "mtime"} if runs else None
     return {
         "baselines": json.loads(baseline_path.read_text()) if baseline_path.exists() else None,
         "federated": [{key: value for key, value in item.items() if key != "mtime"} for item in runs],
-        "latest": {key: value for key, value in runs[0].items() if key != "mtime"} if runs else None,
+        "latest": latest,
         "vfl": json.loads(vfl_path.read_text()) if vfl_path.exists() else None,
+        "privacy_tradeoff": json.loads(tradeoff_path.read_text()) if tradeoff_path.exists() else None,
     }
+
+
+@app.get("/vfl/summary")
+def vfl_summary():
+    vfl_path = Path(settings.RUNS_DIR) / "vfl_demo" / "summary.json"
+    if not vfl_path.exists():
+        raise HTTPException(404, "VFL demo has not been seeded yet")
+    return json.loads(vfl_path.read_text())
+
+
+@app.get("/privacy/tradeoff")
+def privacy_tradeoff():
+    tradeoff_path = Path(settings.RUNS_DIR) / "privacy_tradeoff.json"
+    if not tradeoff_path.exists():
+        raise HTTPException(404, "Privacy tradeoff has not been seeded yet")
+    return json.loads(tradeoff_path.read_text())
 
 
 @app.get("/privacy/epsilon")

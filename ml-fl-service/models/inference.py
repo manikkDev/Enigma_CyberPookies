@@ -26,16 +26,42 @@ def available_runs():
 
 
 def resolve_run(run_id=None):
+    root = Path(settings.RUNS_DIR)
     if run_id:
-        directory = Path(settings.RUNS_DIR) / run_id
+        directory = root / run_id
         if (directory / "summary.json").exists() and (directory / "global_model.npz").exists():
             return directory, json.loads((directory / "summary.json").read_text())
         raise FileNotFoundError("Unknown model run {}".format(run_id))
+    marker = root / "default_run.txt"
+    if marker.exists():
+        directory = root / marker.read_text().strip()
+        if (directory / "summary.json").exists() and (directory / "global_model.npz").exists():
+            return directory, json.loads((directory / "summary.json").read_text())
     runs = available_runs()
     if not runs:
         raise FileNotFoundError("No federated model is available; run the demo seed first")
-    directory = Path(settings.RUNS_DIR) / runs[0]["run_id"]
+    directory = root / runs[0]["run_id"]
     return directory, runs[0]
+
+
+def _predict_proba(matrix, archive):
+    from arth_fl.federated import forward
+    return forward(matrix, archive["params"], archive["layer_sizes"].tolist())
+
+
+def _occlusion_explanations(matrix, probabilities, archive, schema, top=8):
+    names = model_columns(schema)
+    explanations = []
+    for row_index in range(len(matrix)):
+        contributions = []
+        for feature in range(matrix.shape[1]):
+            neutral = matrix[row_index : row_index + 1].copy()
+            neutral[0, feature] = 0.0
+            contribution = float(probabilities[row_index] - _predict_proba(neutral, archive)[0])
+            contributions.append({"feature": names[feature], "contribution": contribution, "direction": "increases risk" if contribution >= 0 else "reduces risk"})
+        contributions.sort(key=lambda item: -abs(item["contribution"]))
+        explanations.append(contributions[:top])
+    return explanations
 
 
 def score_frame(frame, run_id=None, dataset="paysim_banks", explain=False):
@@ -43,18 +69,11 @@ def score_frame(frame, run_id=None, dataset="paysim_banks", explain=False):
     archive = np.load(directory / "global_model.npz")
     schema = SCHEMAS[dataset]
     matrix = frame_to_matrix(frame, schema, archive["mean"], archive["scale"])
-    logits = matrix @ archive["coef"].T + archive["intercept"]
-    probabilities = (1 / (1 + np.exp(-np.clip(logits, -30, 30)))).ravel()
+    probabilities = _predict_proba(matrix, archive)
     result = {"run_id": summary["run_id"], "scores": probabilities.tolist(), "risk_band": ["high" if value >= 0.7 else "medium" if value >= 0.3 else "low" for value in probabilities]}
     if explain:
-        contributions = matrix * archive["coef"].reshape(1, -1)
-        names = model_columns(schema)
-        explanations = []
-        for row in contributions:
-            indices = np.argsort(-np.abs(row))[:8]
-            explanations.append([{"feature": names[index], "contribution": float(row[index]), "direction": "increases risk" if row[index] >= 0 else "reduces risk"} for index in indices])
-        result["explanations"] = explanations
-        result["base_value"] = float(archive["intercept"][0])
+        result["explanations"] = _occlusion_explanations(matrix, probabilities, archive, schema)
+        result["explanation_method"] = "feature occlusion: score change when each feature is set to its population mean"
     return result
 
 

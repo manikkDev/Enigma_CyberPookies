@@ -6,8 +6,19 @@ from arth_fl.federated import run_federated
 from experiments.report import build_report
 from graph.ingest import ingest
 from models.baselines import run as run_baselines
+from models.common import save_json
 from settings import settings
 from vertical.run_vfl_demo import run as run_vfl
+
+BASE_FL = {
+    "dataset": "paysim_banks",
+    "strategy": "fedprox",
+    "num-server-rounds": 8,
+    "local-epochs": 1,
+    "client-sample-cap": 40000,
+    "test-sample-cap": 120000,
+    "secagg-enabled": True,
+}
 
 
 def seed(force=False, include_graph=True):
@@ -17,16 +28,25 @@ def seed(force=False, include_graph=True):
         run_baselines(train_cap=80000, test_cap=120000)
     non_private = root / "demo_fedprox" / "summary.json"
     if force or not non_private.exists():
-        run_federated({"run-id": "demo_fedprox", "dataset": "paysim_banks", "strategy": "fedprox", "num-server-rounds": 8, "local-epochs": 1, "client-sample-cap": 40000, "test-sample-cap": 120000, "secagg-enabled": True, "dp-enabled": False})
-    private = root / "demo_fedprox_dp" / "summary.json"
-    if force or not private.exists():
-        run_federated({"run-id": "demo_fedprox_dp", "dataset": "paysim_banks", "strategy": "fedprox", "num-server-rounds": 5, "local-epochs": 1, "client-sample-cap": 25000, "test-sample-cap": 100000, "secagg-enabled": True, "dp-enabled": True, "dp-noise-multiplier": 3.0, "dp-clipping-norm": 1.0})
+        run_federated({**BASE_FL, "run-id": "demo_fedprox", "dp-enabled": False})
+    tradeoff = []
+    for noise in (0.3, 0.6, 2.0):
+        run_id = "demo_fedprox_dp_{}".format(str(noise).replace(".", "p"))
+        if force or not (root / run_id / "summary.json").exists():
+            summary = run_federated({**BASE_FL, "run-id": run_id, "num-server-rounds": 6, "client-sample-cap": 25000, "test-sample-cap": 80000, "dp-enabled": True, "dp-noise-multiplier": noise, "dp-clipping-norm": 2.0})
+        else:
+            summary = json.loads((root / run_id / "summary.json").read_text())
+        tradeoff.append({"run_id": summary["run_id"], "noise_multiplier": noise, "epsilon": summary["epsilon"], "pr_auc": summary["final"]["pr_auc"], "roc_auc": summary["final"]["roc_auc"]})
+    non_private_summary = json.loads(non_private.read_text())
+    tradeoff.insert(0, {"run_id": non_private_summary["run_id"], "noise_multiplier": 0, "epsilon": None, "pr_auc": non_private_summary["final"]["pr_auc"], "roc_auc": non_private_summary["final"]["roc_auc"]})
+    save_json(root / "privacy_tradeoff.json", {"scope": "central-DP on institution updates, 5 clients; honest measured tradeoff", "delta": 1e-5, "clipping_norm": 2.0, "points": tradeoff})
+    (root / "default_run.txt").write_text("demo_fedprox")
     vfl_path = root / "vfl_demo" / "summary.json"
     if force or not vfl_path.exists():
         run_vfl(sample_cap=6000)
     graph = ingest("demo_fedprox", 12000) if include_graph else None
     report = build_report()
-    result = {"ok": True, "baseline": json.loads(baseline_path.read_text()), "federated_runs": [run["run_id"] for run in report["federated"]], "vfl": report["vfl"], "graph": graph}
+    result = {"ok": True, "baseline": json.loads(baseline_path.read_text()), "federated_runs": [run["run_id"] for run in report["federated"]], "privacy_tradeoff": tradeoff, "vfl": report["vfl"], "graph": graph}
     print(json.dumps(result, indent=2))
     return result
 

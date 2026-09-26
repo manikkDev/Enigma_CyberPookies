@@ -2,39 +2,30 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { 
-  ChevronDown, LogOut, User, Shield, Search, AlertTriangle, 
-  FileText, Network, Bell, Briefcase, ScanLine, BarChart3, 
-  Target, MessageSquare, Menu, X, Sparkles
+import {
+  ChevronDown, LogOut, User, Shield, Search, AlertTriangle,
+  FileText, Network, Bell, Briefcase, ScanLine, BarChart3,
+  Target, MessageSquare, Menu, X, Sparkles, GitBranch, Scale, Landmark
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
 // Navigation sections - organized by workflow
-const DETECTION_TOOLS = [
-  { icon: ScanLine, label: "Threat Analysis", href: "/analyze", desc: "Analyze content & IOCs" },
-  { icon: Search, label: "URL Scanner", href: "/analyze?mode=url", desc: "Check suspicious URLs" },
-  { icon: Shield, label: "Phishing Detector", href: "/analyze?mode=phishing", desc: "Email & impersonation" },
+const ANALYST_TOOLS = [
+  { icon: BarChart3, label: "Command Center", href: "/analyst", desc: "Portfolio risk overview" },
+  { icon: GitBranch, label: "FL Control Panel", href: "/analyst/fl", desc: "Federated training runs" },
+  { icon: Network, label: "Risk Graph", href: "/analyst/graph", desc: "Pseudonymised Neo4j intelligence" },
+  { icon: Scale, label: "Fairness Audit", href: "/analyst/fairness", desc: "Bias across institutions" },
 ];
 
-const INVESTIGATION_TOOLS = [
-  { icon: Network, label: "Threat Graph", href: "/graph", desc: "Visualize relationships" },
-  { icon: MessageSquare, label: "AI Copilot", href: "/chat", desc: "Investigator assistant" },
-  { icon: Target, label: "Campaign Tracker", href: "/chat?mode=campaigns", desc: "Cluster analysis" },
-  { icon: AlertTriangle, label: "Misinformation", href: "/chat?mode=misinfo", desc: "Coordinated content" },
-  { icon: FileText, label: "AML Patterns", href: "/chat?mode=aml", desc: "Financial crime (P1-P6)" },
+const CITIZEN_TOOLS = [
+  { icon: User, label: "My Risk Profile", href: "/citizen", desc: "Explainable risk score" },
+  { icon: Shield, label: "Consent Center", href: "/citizen/consent", desc: "DPDP purpose controls" },
+  { icon: MessageSquare, label: "AI Copilot", href: "/chat", desc: "Ask about your score" },
 ];
 
-const RESPONSE_TOOLS = [
-  { icon: Bell, label: "Alerts", href: "/alerts", badge: true },
-  { icon: Briefcase, label: "Cases", href: "/cases", badge: false },
-  { icon: BarChart3, label: "Dashboard", href: "/dashboard", badge: false },
-];
-
-// Landing page sections (anchor links)
-const LANDING_SECTIONS = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Demo", href: "#demo" },
+const DIRECT_LINKS = [
+  { icon: MessageSquare, label: "Copilot", href: "/chat", badge: false },
+  { icon: Network, label: "Network", href: "/graph", badge: false },
 ];
 
 const Navbar = () => {
@@ -87,29 +78,29 @@ const Navbar = () => {
               Arth Saathi
             </span>
             <span className="text-[10px] text-muted-foreground -mt-1 hidden sm:block">
-              AI Threat Intelligence
+              Federated Risk Intelligence
             </span>
           </div>
         </Link>
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex items-center gap-1">
-          {/* Detection Dropdown */}
-          <NavDropdown 
-            label="Detection" 
-            items={DETECTION_TOOLS}
-            icon={ScanLine}
+          {/* Analyst Dropdown */}
+          <NavDropdown
+            label="Analyst"
+            items={ANALYST_TOOLS}
+            icon={Landmark}
           />
-          
-          {/* Investigation Dropdown */}
-          <NavDropdown 
-            label="Investigation" 
-            items={INVESTIGATION_TOOLS}
-            icon={Network}
+
+          {/* Citizen Dropdown */}
+          <NavDropdown
+            label="Citizen"
+            items={CITIZEN_TOOLS}
+            icon={User}
           />
-          
-          {/* Response Links */}
-          {RESPONSE_TOOLS.map((tool) => (
+
+          {/* Direct Links */}
+          {DIRECT_LINKS.map((tool) => (
             <NavLink key={tool.label} href={tool.href} icon={tool.icon} badge={tool.badge}>
               {tool.label}
             </NavLink>
@@ -120,11 +111,11 @@ const Navbar = () => {
         <div className="flex items-center gap-2">
           {/* Quick Demo Button - Desktop */}
           <Link
-            href="/analyze"
+            href="/analyst/fl"
             className="hidden md:flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
           >
             <Sparkles className="h-4 w-4" />
-            Start Analysis
+            Live FL Demo
           </Link>
 
           {/* Auth */}
@@ -190,18 +181,18 @@ const Navbar = () => {
             {/* Quick Actions */}
             <div className="flex gap-2">
               <Link
-                href="/analyze"
+                href="/analyst/fl"
                 onClick={() => setMobileOpen(false)}
                 className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground"
               >
-                <ScanLine className="h-4 w-4" />
-                Analyze Threat
+                <GitBranch className="h-4 w-4" />
+                Live FL Demo
               </Link>
             </div>
 
-            {/* Detection Section */}
-            <MobileNavSection title="Detection">
-              {DETECTION_TOOLS.map((tool) => (
+            {/* Analyst Section */}
+            <MobileNavSection title="Analyst">
+              {ANALYST_TOOLS.map((tool) => (
                 <MobileNavLink key={tool.label} href={tool.href} icon={tool.icon} onClick={() => setMobileOpen(false)}>
                   <div>
                     <p className="font-medium">{tool.label}</p>
@@ -211,9 +202,9 @@ const Navbar = () => {
               ))}
             </MobileNavSection>
 
-            {/* Investigation Section */}
-            <MobileNavSection title="Investigation">
-              {INVESTIGATION_TOOLS.map((tool) => (
+            {/* Citizen Section */}
+            <MobileNavSection title="Citizen">
+              {CITIZEN_TOOLS.map((tool) => (
                 <MobileNavLink key={tool.label} href={tool.href} icon={tool.icon} onClick={() => setMobileOpen(false)}>
                   <div>
                     <p className="font-medium">{tool.label}</p>
@@ -223,9 +214,9 @@ const Navbar = () => {
               ))}
             </MobileNavSection>
 
-            {/* Response Section */}
-            <MobileNavSection title="Response">
-              {RESPONSE_TOOLS.map((tool) => (
+            {/* Platform Section */}
+            <MobileNavSection title="Platform">
+              {DIRECT_LINKS.map((tool) => (
                 <MobileNavLink key={tool.label} href={tool.href} icon={tool.icon} onClick={() => setMobileOpen(false)}>
                   {tool.label}
                 </MobileNavLink>

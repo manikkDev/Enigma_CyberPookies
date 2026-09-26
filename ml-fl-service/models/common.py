@@ -7,10 +7,16 @@ import pandas as pd
 from data.schema import SCHEMAS
 
 TYPE_VOCAB = ["CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"]
+MODEL_NUMERIC = ["amount", "amt_log", "amt_to_bal_ratio", "oldbalanceOrg", "oldbalanceDest", "hour", "is_night", "orig_tx_count_24", "orig_amt_sum_24"]
+
+
+def numeric_columns(schema):
+    selected = [column for column in MODEL_NUMERIC if column in schema.numeric]
+    return selected or schema.numeric
 
 
 def model_columns(schema):
-    return [*schema.numeric, *["type_{}".format(value) for value in TYPE_VOCAB]]
+    return [*numeric_columns(schema), *["type_{}".format(value) for value in TYPE_VOCAB]]
 
 
 def sample_frame(frame, target, maximum, seed=42):
@@ -24,7 +30,7 @@ def sample_frame(frame, target, maximum, seed=42):
 
 
 def frame_to_matrix(frame, schema, mean=None, scale=None):
-    numeric = frame[schema.numeric].fillna(0).to_numpy(np.float32)
+    numeric = frame[numeric_columns(schema)].fillna(0).to_numpy(np.float32)
     categories = np.column_stack([(frame["type"] == value).to_numpy(np.float32) for value in TYPE_VOCAB]) if "type" in schema.categorical else np.empty((len(frame), 0), np.float32)
     matrix = np.column_stack([numeric, categories]).astype(np.float32)
     if mean is not None and scale is not None:

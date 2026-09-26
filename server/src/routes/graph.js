@@ -1,7 +1,11 @@
 import express from "express";
 import neo4j from "neo4j-driver";
 
+import { protect } from "../middleware/authMiddleware.js";
+import { requireRole } from "../middleware/requireRole.js";
+
 const router = express.Router();
+const analystOnly = [protect, requireRole("analyst", "admin")];
 
 const driver = neo4j.driver(
   process.env.NEO4J_URI,
@@ -241,7 +245,7 @@ router.get("/graph/stream", (req, res) => {
   sendData();
 });
 
-router.get("/risk-graph/overview", async (req, res) => {
+router.get("/risk-graph/overview", ...analystOnly, async (req, res) => {
   const session = driver.session();
   try {
     const minScore = Number(req.query.minScore ?? 0.3);
@@ -273,7 +277,7 @@ router.get("/risk-graph/overview", async (req, res) => {
   }
 });
 
-router.get("/risk-graph/campaigns", async (_req, res) => {
+router.get("/risk-graph/campaigns", ...analystOnly, async (_req, res) => {
   const session = driver.session();
   try {
     const result = await session.run("MATCH (campaign:Campaign) RETURN campaign.id AS id, campaign.label AS label, campaign.size AS size, campaign.avg_score AS avg_score, campaign.n_high AS n_high ORDER BY campaign.n_high DESC, campaign.avg_score DESC LIMIT 25");
@@ -285,7 +289,7 @@ router.get("/risk-graph/campaigns", async (_req, res) => {
   }
 });
 
-router.get("/risk-graph/campaign/:id", async (req, res) => {
+router.get("/risk-graph/campaign/:id", ...analystOnly, async (req, res) => {
   const session = driver.session();
   try {
     const result = await session.run(
@@ -310,7 +314,7 @@ router.get("/risk-graph/campaign/:id", async (req, res) => {
   }
 });
 
-router.get("/risk-graph/account/:pid/neighbors", async (req, res) => {
+router.get("/risk-graph/account/:pid/neighbors", ...analystOnly, async (req, res) => {
   const session = driver.session();
   try {
     const result = await session.run("MATCH (account:Account {pid:$pid})-[edge:TRANSFERRED_TO]-(neighbor:Account) RETURN neighbor.pid AS id, neighbor.risk_score AS score, neighbor.risk_band AS band, edge.n_tx AS n_tx, edge.total_amt AS total_amt LIMIT 50", { pid: req.params.pid });

@@ -1,10 +1,10 @@
 import useCountUp from "@/hooks/useCountUp";
 
 const stats = [
-  { end: 810, suffix: "K+", label: "Offshore entities" },
-  { end: 28, suffix: "", label: "Laundering typologies" },
-  { end: 6, suffix: "", label: "Jurisdictions covered" },
-  { end: 94, suffix: "%", label: "Detection accuracy" },
+  { end: 6, suffix: "M+", label: "Federated transactions" },
+  { end: 5, suffix: "", label: "Institutions, zero pooling" },
+  { end: 99, suffix: "%", label: "Federated ROC-AUC" },
+  { end: 100, suffix: "%", label: "Reproducible artifacts" },
 ];
 
 const StatsSection = () => {

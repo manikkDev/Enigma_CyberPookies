@@ -4,33 +4,33 @@ import CircularFlowDiagram from "./CircularFlowDiagram";
 const steps = [
   {
     num: "01",
-    title: "Collect",
-    subtitle: "Ingest threat content & indicators",
-    body: "Email headers, SMS logs, social posts, URLs, attachments, and threat reports are collected. Public threat intelligence feeds and IOC databases are cross-referenced automatically.",
+    title: "Partition",
+    subtitle: "Real data, five institutions",
+    body: "5.7M real transactions (PaySim, SHA-256 verified) are partitioned across five simulated banks. Customer IDs are pseudonymised with a keyed hash before anything else touches them.",
   },
   {
     num: "02",
-    title: "Extract",
-    subtitle: "Build the threat relationship graph",
-    body: "Every domain, URL, email, phone, and actor becomes a node. Every connection, mention, or transaction becomes a directed edge. Multi-platform attack chains are resolved into a single traversable graph.",
+    title: "Train locally",
+    subtitle: "Each bank, on its own data",
+    body: "Every institution runs local epochs inside its own boundary. Raw customer rows never leave — only clipped model weight updates are produced for aggregation.",
   },
   {
     num: "03",
-    title: "Analyze",
-    subtitle: "Run pattern & campaign detection",
-    body: "AI algorithms scan for phishing patterns, malicious infrastructure, coordinated campaigns, and behavioral anomalies matching known threat typologies.",
+    title: "Aggregate",
+    subtitle: "Secure aggregation + DP noise",
+    body: "Pairwise masks mean the server only ever sees the sum of updates, never an individual bank's. Optional differential privacy adds calibrated noise with a reported ε budget.",
   },
   {
     num: "04",
-    title: "Score",
-    subtitle: "Assign explainable risk scores",
-    body: "Each threat indicator receives a risk score based on content analysis, infrastructure reputation, behavioral patterns, and campaign correlation. Critical threats (90+) are escalated immediately.",
+    title: "Converge",
+    subtitle: "A shared global model",
+    body: "Rounds repeat until the federated model approaches the centralized ceiling — measurably better than any bank training alone, with PR-AUC tracked per round.",
   },
   {
     num: "05",
-    title: "Investigate",
-    subtitle: "Surface intelligence to analysts",
-    body: "Threat campaigns appear in the investigator queue with visual attack graphs, IOC timelines, risk breakdowns, and exportable intelligence packages.",
+    title: "Explain & consent",
+    subtitle: "Scores people can trust",
+    body: "Analysts see feature-level explanations and a pseudonymised risk graph. Citizens see their band, plain-language reasons, and consent controls they actually own.",
   },
 ];
 
@@ -56,9 +56,9 @@ const HowItWorksSection = () => {
           <div>
             <span className="text-8xl font-mono text-primary text-bold mb-2">HOW IT WORKS</span>
             <h2 className="mt-6 text-3xl md:text-[42px] leading-[1.15] font-serif text-foreground">
-              From scattered threats
+              From siloed ledgers
               <br />
-              <span className="font-bold">to complete campaign intelligence.</span>
+              <span className="font-bold">to one shared risk model.</span>
             </h2>
           </div>
           <div className="flex justify-center md:justify-end">

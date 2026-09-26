@@ -3,15 +3,15 @@ const FooterCTA = () => {
     <section className="py-24 md:py-32 bg-background">
       <div className="mx-auto max-w-3xl px-6 text-center">
         <h2 className="text-3xl md:text-[44px] leading-[1.15] font-serif text-foreground">
-          Built to catch what
+          Built to learn what
           <br />
-          <span className="font-bold">other systems miss.</span>
+          <span className="font-bold">no institution can see alone.</span>
         </h2>
         <p className="mt-4 text-base text-muted-foreground">
-          Arth Saathi — your intelligent financial companion
+          Arth Saathi — privacy-preserving federated risk intelligence
         </p>
         <div className="mt-8">
-          <a href="#demo" className="btn-primary animate-glow-pulse">
+          <a href="/signup" className="btn-primary animate-glow-pulse">
             Explore the Demo ↗
           </a>
         </div>

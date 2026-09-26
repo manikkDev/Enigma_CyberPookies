@@ -24,3 +24,15 @@
 - Velocity features are causal: they use only prior transactions in the preceding 24 PaySim steps and exclude the current transaction and all same-step transactions. Feature generation is shard-local, so it may omit history crossing source shard boundaries but cannot leak future or test information.
 - Synthetic augmentation is opt-in and restricted to client `train.parquet`. Generated rows are explicitly marked `is_synthetic=1`; validation and test validation rejects synthetic rows.
 - `make data` intentionally downloads only the credential-free primary PaySim dataset. GMSC is available through `python -m data.download --only gmsc` when Kaggle credentials are configured.
+
+## Phases 2–7
+
+- The deployable model family for federated training is an MLP(48,24) trained with synchronous FedAvg/FedProx in `arth_fl/federated.py`. The Flower Message API differs in pinned Flower 1.20, so the production demo path is the synchronous runner; Flower apps remain as scaffolds.
+- PaySim post-transaction balance fields (`newbalanceOrig`, `newbalanceDest`, `orig_delta`, `dest_delta`, `orig_zero_after`, `dest_zero_before`) are excluded from model features: the simulator's balance bookkeeping nearly encodes the fraud label, making every baseline trivially perfect. The model uses only pre-transaction observables (amount, pre-transaction balances, ratio, time, causal velocity, type).
+- Baseline sampling keeps all fraud positives and caps negatives; evaluation reports the sampled positive rate. Centralized training uses the union of the same per-client samples as isolated training so the comparison is budget-fair.
+- `runs/default_run.txt` names the model used for inference so "latest" never resolves to a deliberately degraded DP experiment run.
+- DP is applied at the institution-update level: per-client L2 clipping (norm 2.0) plus Gaussian noise on the aggregate, with Opacus RDP epsilon accounting. With five clients, strong epsilon destroys utility; `runs/privacy_tradeoff.json` reports the measured curve rather than a synthetic one.
+- Secure aggregation is a pairwise-mask simulation and is labeled `simulated_pairwise_masks` in every run event and the UI; it is not presented as production SecAgg.
+- Graph ingestion writes only pseudonymous IDs, model risk scores/bands, and aggregated edge statistics. Community detection uses NetworkX Louvain; no raw identifiers, names, or balances enter Neo4j.
+- The VFL showcase uses hashed Diffie–Hellman PSI (educational simulation) to align shared record IDs, then a pooled logistic model on vertically partitioned feature groups to measure the bank-only vs combined AUC gain.
+- Explainability uses feature occlusion (score delta when each standardized feature is neutralized), which is model-agnostic and valid for the MLP; it is presented as SHAP-style perturbation contributions, not exact SHAP values.

@@ -1,11 +1,11 @@
 import useScrollReveal from "@/hooks/useScrollReveal";
 
 const entities = [
-  { name: "phishing-campaign-01", jurisdiction: "Dark Web", score: 94, tier: "red"  },
-  { name: "malicious-domain.net", jurisdiction: "Bulletproof Host", score: 81, tier: "amber"  },
-  { name: "fake-support[.]com", jurisdiction: "Cloudflare", score: 76, tier: "amber"  },
-  { name: "suspicious-email[.]org", jurisdiction: "Gmail", score: 52, tier: "yellow"  },
-  { name: "benign-domain.com", jurisdiction: "AWS", score: 38, tier: "green"  },
+  { name: "acct_3f8a…c91d", jurisdiction: "Bank 2 · mule ring", score: 94, tier: "red"  },
+  { name: "acct_77b1…04ef", jurisdiction: "Bank 0 · layering", score: 81, tier: "amber"  },
+  { name: "acct_9c2d…a880", jurisdiction: "Bank 4 · velocity spike", score: 76, tier: "amber"  },
+  { name: "acct_51e6…3ba7", jurisdiction: "Bank 1 · watchlist", score: 52, tier: "yellow"  },
+  { name: "acct_d04f…12c3", jurisdiction: "Bank 3 · normal", score: 38, tier: "green"  },
 ];
 
 const tierColors = {
@@ -51,9 +51,9 @@ const DemoPreviewSection = () => {
         <div className="text-center mb-12">
           <span className="pill-badge">DEMO PREVIEW</span>
           <h2 className="mt-6 text-3xl md:text-[44px] leading-[1.15] font-serif text-foreground">
-            See a threat campaign
+            See a fraud ring surface
             <br />
-            <span className="font-bold">detected in real time.</span>
+            <span className="font-bold">without sharing a row.</span>
           </h2>
         </div>
 
@@ -74,7 +74,7 @@ const DemoPreviewSection = () => {
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" />
               <span className="text-xs font-serif text-foreground">Arth Saathi</span>
             </div>
-            <span className="pill-badge-amber !text-[10px]">⚠ 3 threat campaigns detected</span>
+            <span className="pill-badge-amber !text-[10px]">⚠ mule network spanning 3 banks</span>
             <div className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
               <span className="text-[11px] font-mono text-primary">Live</span>
@@ -86,7 +86,7 @@ const DemoPreviewSection = () => {
             {/* Left sidebar */}
             <div className="border-r border-border p-4">
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
-              Threat Indicators
+              Flagged Accounts
               </p>
               <div className="space-y-2">
                 {entities.map((e) => {
@@ -112,15 +112,15 @@ const DemoPreviewSection = () => {
                 })}
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                <span className="pill-badge !text-[9px] !px-2 !py-0.5">Phishing kit · 3 domains</span>
-                <span className="pill-badge !text-[9px] !px-2 !py-0.5">C2 server · 2 IPs</span>
+                <span className="pill-badge !text-[9px] !px-2 !py-0.5">SecAgg · 5 clients</span>
+                <span className="pill-badge !text-[9px] !px-2 !py-0.5">DP ε reported</span>
               </div>
             </div>
 
             {/* Center graph */}
             <div className="p-4 flex flex-col">
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2">
-                Threat Graph
+                Risk Graph
               </p>
               <div className="flex-1 flex items-center justify-center">
                 <svg viewBox="0 0 500 280" className="w-full max-h-[280px]">
@@ -173,36 +173,36 @@ const DemoPreviewSection = () => {
                 </svg>
               </div>
               <p className="text-xs font-mono text-muted-foreground text-center mt-2">
-                Campaign detected: <span className="text-destructive">High risk</span> infrastructure across 3 stages
+                Mule loop detected: <span className="text-destructive">High risk</span> · funds cycle across 3 banks
               </p>
             </div>
 
             {/* Right sidebar */}
             <div className="border-l border-border p-4">
               <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-3">
-                Threat Detail
+                Account Detail
               </p>
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-base font-serif text-foreground">phishing-campaign-01</h4>
-                  <p className="text-[11px] font-mono text-muted-foreground">Dark Web · First seen: 2 hours ago</p>
+                  <h4 className="text-base font-serif text-foreground">acct_3f8a…c91d</h4>
+                  <p className="text-[11px] font-mono text-muted-foreground">Pseudonymised · scored by federated model</p>
                 </div>
                 <div className="text-[11px] text-muted-foreground space-y-1">
-                  <p>Actor: <span className="text-foreground">[Unknown]</span> · Targeted brands: 5</p>
-                  <p>Connected indicators: 6 · Attack vectors: 3</p>
+                  <p>Top drivers: <span className="text-foreground">velocity, counterparty diversity, round amounts</span></p>
+                  <p>Linked accounts: 6 · institutions touched: 3</p>
                 </div>
                 <div>
                   <span className="text-3xl font-mono text-destructive font-semibold">94</span>
                   <span className="text-sm text-muted-foreground font-mono"> /100</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <span className="pill-badge-red !text-[9px] !px-2 !py-0.5">Brand impersonation — Phishing</span>
-                  <span className="pill-badge-amber !text-[9px] !px-2 !py-0.5">C2 infrastructure</span>
+                  <span className="pill-badge-red !text-[9px] !px-2 !py-0.5">Mule ring — layering</span>
+                  <span className="pill-badge-amber !text-[9px] !px-2 !py-0.5">Cross-bank edges</span>
                 </div>
                 <button
                   className="w-full mt-2 rounded-lg border border-primary text-primary text-xs font-mono py-2 hover:bg-primary/10 transition"
                 >
-                  Export Intelligence Package ↗
+                  Open investigation ↗
                 </button>
               </div>
             </div>
@@ -210,7 +210,7 @@ const DemoPreviewSection = () => {
         </div>
 
         <p className="text-center mt-8">
-          <a href="#" className="text-[15px] text-primary hover:underline">
+          <a href="/signup" className="text-[15px] text-primary hover:underline">
             Explore the full interactive demo →
           </a>
         </p>

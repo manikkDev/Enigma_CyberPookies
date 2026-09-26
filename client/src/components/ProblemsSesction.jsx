@@ -1,9 +1,9 @@
 import useScrollReveal from "@/hooks/useScrollReveal";
 
 const txRows = [
-  { from: "Malicious Domain", to: "Phishing Kit", amount: "High Risk" },
-  { from: "Phishing Kit", to: "Command Server", amount: "Critical" },
-  { from: "Command Server", to: "Data Exfil", amount: "Severe" },
+  { from: "Bank", to: "repayment history", amount: "Siloed" },
+  { from: "Insurer", to: "claims history", amount: "Siloed" },
+  { from: "Lending app", to: "spending patterns", amount: "Siloed" },
 ];
 
 const ProblemSection = () => {
@@ -27,21 +27,21 @@ const ProblemSection = () => {
         {/* Left text */}
         <div>
           <span className="text-8xl font-mono text-primary text-bold mb-2">
-            THE THREAT
+            THE PROBLEM
           </span>
           <h2 className="mt-6 text-3xl md:text-[42px] leading-[1.15] text-foreground font-serif">
-            Every attack looks isolated.
+            Every institution sees a slice.
             <br />
-            <span className="font-bold">Until you connect the signals.</span>
+            <span className="font-bold">Nobody can pool it legally.</span>
           </h2>
           <p className="mt-6 text-[15px] leading-[1.8] text-muted-foreground max-w-md">
-            Modern digital threats span multiple platforms — phishing emails, malicious URLs, fake social profiles, and financial scams. Each indicator appears harmless alone. Only the threat network reveals the campaign.
+            A customer's financial life is split across a bank, an insurer and a lending app. Moving raw data across institutions breaks the DPDP Act and RBI localization rules — so each trains on thin, siloed data and misses the fraud rings that span them all.
           </p>
           <a
             href="#how-it-works"
             className="mt-6 inline-block text-sm text-primary hover:underline"
           >
-            See how detection works →
+            See how federated learning fixes this →
           </a>
         </div>
 
@@ -56,12 +56,12 @@ const ProblemSection = () => {
           }}
         >
           <div className="float-card animate-idle-float p-6 w-full max-w-sm" style={{ transform: "rotate(-2deg)" }}>
-            <span className="pill-badge mb-4">⚠ CAMPAIGN DETECTED</span>
+            <span className="pill-badge mb-4">⚠ FRAUD RING DETECTED</span>
             <h3 className="mt-4 text-xl font-serif text-foreground">
-              Phishing Campaign Alpha
+              Mule Network 3f8a…c91d
             </h3>
             <p className="text-xs font-mono text-muted-foreground mt-1">
-              Multi-platform attack infrastructure
+              Spanning 3 institutions · invisible to each alone
             </p>
             <p className="mt-4 text-4xl font-mono text-destructive font-semibold">
               94 <span className="text-lg text-muted-foreground font-normal">/ 100</span>
@@ -84,7 +84,7 @@ const ProblemSection = () => {
             </div>
 
             <div className="mt-4">
-              <span className="pill-badge-red">Attack chain · 3 stages</span>
+              <span className="pill-badge-red">Pseudonymised · derived signals only</span>
             </div>
           </div>
         </div>

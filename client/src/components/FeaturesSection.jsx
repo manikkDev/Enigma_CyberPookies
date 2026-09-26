@@ -1,14 +1,14 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
-import { Shield, Search, MessageCircle, AlertTriangle, Network, FileText } from "lucide-react";
+import { Shield, Search, MessageCircle, AlertTriangle, Network, FileText, GitBranch, Lock, Scale } from "lucide-react";
 
 const features = [
-  { icon: Shield, title: "Malicious Content Detection", description: "Identify phishing, malware, and harmful content across emails, SMS, and social platforms." },
-  { icon: Search, title: "IOC & Entity Extraction", description: "Automatically extract URLs, domains, emails, phone numbers, and threat indicators from any content." },
-  { icon: MessageCircle, title: "AI Threat Investigator", description: "Chat with an AI assistant trained in cyber threat analysis and financial crime investigation." },
-  { icon: AlertTriangle, title: "Real-time Threat Scoring", description: "Get explainable risk scores with breakdowns for content, infrastructure, and behavioral patterns." },
-  { icon: Network, title: "Campaign Correlation Graph", description: "Visualize threat networks and relationships between actors, infrastructure, and attack patterns." },
-  { icon: FileText, title: "AML & Financial Threats", description: "Detect money laundering patterns, illicit finance networks, and financial crime typologies." },
+  { icon: GitBranch, title: "Horizontal Federated Learning", description: "Five institutions train one shared model on their own customers. FedAvg/FedProx strategies with live per-round convergence — raw rows never move." },
+  { icon: Lock, title: "Secure Aggregation + Differential Privacy", description: "The server only sees masked aggregate updates, never individual ones. Central-DP noise with a measured privacy budget (ε, δ) reported per run." },
+  { icon: Search, title: "Vertical FL with PSI", description: "Bank, insurer and lender hold different features of the same customer. Private set intersection aligns shared IDs without revealing non-shared ones." },
+  { icon: Network, title: "Pseudonymised Risk Graph", description: "Neo4j stores only derived intelligence — pseudonymous account nodes and risk edges — exposing mule networks no single bank could see." },
+  { icon: AlertTriangle, title: "Explainable Risk Scores", description: "Analysts get per-customer scores with signed feature contributions; citizens get plain-language explanations, not black-box verdicts." },
+  { icon: Scale, title: "Consent & DPDP Rights", description: "Purpose-level consent for scoring, monitoring and training. Erasure requests and full audit trails are first-class API citizens." },
 ];
 
 const FeatureCard = ({ feature, index }) => {
@@ -39,10 +39,10 @@ const FeaturesSection = () => {
       <div className="container mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="font-heading text-3xl md:text-5xl font-bold text-foreground mb-4">
-            Digital Threat <span className="text-gradient-primary">Intelligence</span>
+            Federated <span className="text-gradient-primary">Risk Intelligence</span>
           </h2>
           <p className="font-body text-muted-foreground text-lg max-w-xl mx-auto">
-            Six powerful analysis modules working together to protect your digital ecosystem.
+            Privacy infrastructure and machine learning working together — provably, not by promise.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

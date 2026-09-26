@@ -2,9 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 
 const STATS = [
-  { value: "2.1M+", label: "Threats Analyzed" },
-  { value: "12", label: "Threat Families" },
-  { value: "Real-time", label: "IOC Tracking" },
+  { value: "5.7M+", label: "Federated Transactions" },
+  { value: "5", label: "Institutions" },
+  { value: "0", label: "Raw Rows Shared" },
 ];
 
 // ══════════════════════════════════════════════════════════════════
@@ -711,7 +711,7 @@ const HeroSection = () => {
                 marginBottom: 20,
               }}
             >
-              Detect threats.
+              Sharper risk models.
               <br />
               <em
                 style={{
@@ -720,9 +720,9 @@ const HeroSection = () => {
                   fontWeight: 400,
                 }}
               >
-                Connect
+                Zero raw data
               </em>
-              <span style={{ fontWeight: 900 }}> the signals.</span>
+              <span style={{ fontWeight: 900 }}> shared.</span>
             </h1>
 
             <p
@@ -735,7 +735,7 @@ const HeroSection = () => {
                 margin: "0 auto 32px",
               }}
             >
-              Arth Saathi analyzes malicious content, phishing campaigns, and financial threats across digital platforms to surface attack patterns that traditional systems miss.
+              Arth Saathi lets banks, insurers and lenders jointly train fraud and credit-risk models with federated learning — every customer row stays inside its institution, with secure aggregation, differential privacy and citizen consent built in.
             </p>
 
             <div
@@ -750,7 +750,7 @@ const HeroSection = () => {
               }}
             >
               <a
-                href="#demo"
+                href="/signup"
                 className="btn-primary btn-glow animate-glow-pulse"
                 style={{
                   fontSize: 14,
@@ -759,7 +759,7 @@ const HeroSection = () => {
                   letterSpacing: ".035em",
                 }}
               >
-                Get Started Today ↗
+                Launch the Demo ↗
               </a>
               <a
                 href="#how-it-works"
@@ -918,7 +918,7 @@ const HeroSection = () => {
                 opacity: 0.55,
               }}
             >
-              REAL-TIME ENTITY GRAPH · BVI · CAYMAN · PANAMA · DELAWARE
+              FEDERATED NETWORK · 5 INSTITUTIONS · SECURE AGGREGATION
             </p>
           </div>
         </div>

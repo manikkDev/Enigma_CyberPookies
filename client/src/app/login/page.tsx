@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.replace("/chat")
+      router.replace(user.role === "citizen" ? "/citizen" : "/analyst")
     }
   }, [isLoading, user, router])
 
@@ -22,7 +22,7 @@ export default function LoginPage() {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-2">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Redirecting to chat…</p>
+        <p className="text-sm text-muted-foreground">Redirecting to your dashboard…</p>
       </div>
     )
   }

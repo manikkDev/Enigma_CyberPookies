@@ -44,6 +44,37 @@ Phase 1 provides a reproducible, privacy-conscious financial data pipeline:
 
 The generated dataset files are intentionally gitignored. Phase 2 model training consumes the reproducible partition paths. The complete architecture and phase contracts are in `IMPLEMENTATION_PLAN.md`.
 
+## Phases 2–7 status (demo-complete)
+
+The platform now implements the full loop end to end:
+
+- **Baselines (Phase 2).** `models/baselines.py` trains one pooled XGBoost model (the "if pooling were legal" ceiling) and one isolated XGBoost per bank on identical per-client sample budgets. Metrics: ROC-AUC, PR-AUC, F1, recall@P90, Brier, ECE → `ml-fl-service/runs/baselines_paysim_banks.json`.
+- **Horizontal FL (Phase 3).** `arth_fl/federated.py` implements synchronous FedAvg/FedProx over the five bank partitions with an MLP(48,24). Raw parquet rows never leave `client_i/` loaders; only parameter deltas and aggregate feature statistics cross. Runs persist `metrics.jsonl` + `summary.json` + `global_model.npz` and are controllable via `/fl/start`, `/fl/stop`, `/fl/status`, `/fl/runs`, `/fl/stream` (SSE).
+- **Privacy (Phase 4).** Per-client update clipping + Gaussian noise on the aggregate, epsilon via Opacus RDP accounting (fallback formula included), pairwise-mask secure-aggregation **simulation** (labeled as such). Measured ε-vs-utility curve at `runs/privacy_tradeoff.json`.
+- **Graph (Phase 5).** `graph/ingest.py` writes only pseudonymous IDs, model scores and aggregated transfer stats into Neo4j; Louvain community detection surfaces fraud-ring campaigns. Authenticated endpoints: `/api/risk-graph/overview|campaigns|campaign/:id|account/:pid/neighbors`.
+- **Serving + UI (Phase 6).** `/predict` (with occlusion-based explanations), `/customers/.../sample`, `/citizen/{ref}`, `/fairness`, all proxied through `chatbot-backend` with JWT + role checks + Mongo audit logging. Analyst pages: overview, FL control with live convergence, risk graph, fairness, customer investigation. Citizen pages: risk profile, DPDP-style consent center, copilot.
+- **VFL/PSI (Phase 7).** `vertical/psi.py` is a hashed Diffie–Hellman educational PSI simulation; `vertical/run_vfl_demo.py` aligns parties on shared record IDs and measures bank-only vs combined-feature AUC → `runs/vfl_demo/summary.json`.
+
+## Live demo flow (mentoring session)
+
+1. Start the stack: `docker compose up -d` → all six services healthy; `make health` returns 200×3.
+2. Seed artifacts if `ml-fl-service/runs/` is empty: `docker compose run --rm ml-fl-service python -m experiments.seed_demo` (or locally: `.venv/bin/python -m experiments.seed_demo`). Writes baselines, `demo_fedprox` (default model), three DP tradeoff runs, VFL summary, and the Neo4j graph.
+3. Sign up at `localhost:3000/signup` as **analyst** (institution 0–4) → `/analyst` shows FL vs isolated vs centralized PR-AUC, the privacy posture, and the priority review queue.
+4. `/analyst/fl` → toggle DP, watch the live ε estimate, start a run, see per-round PR-AUC convergence against the isolated mean.
+5. `/analyst/graph` → Neo4j risk rings (only pseudonymous IDs); click through campaign members.
+6. `/analyst/fairness` → per-institution PR-AUC / false-positive-rate spread (operational fairness — PaySim has no demographics).
+7. `/analyst/customers/[id]` → per-account score, occlusion feature contributions, graph neighbours, recommended action.
+8. Sign up as **citizen** → `/citizen` shows a plain-language risk gauge and explanations; `/citizen/consent` exercises purpose toggles + erasure request (DPDP); `/chat` talks to the copilot.
+9. Judges' verification: `curl localhost:5001/api/fl/runs` without a token → 401; `curl localhost:8000/datasets` → partition metadata; `runs/` JSON files reproduce every headline number.
+
+## Honest limitations
+
+- PaySim is **synthetic** mobile-money data; it is nearly separable given the right features, so the isolated-vs-centralized gap is small by construction. Post-transaction balance fields (`newbalance*`, `*_delta`, `*_zero_*`) are excluded from the model as leakage; the demo model uses only pre-transaction observables.
+- The FL model is an MLP trained with FedAvg/FedProx — a different class than the XGBoost baselines, so FL-vs-baseline mixes "model class" and "data sharing" effects. The centralized XGBoost number is a ceiling, not a deployable design.
+- Secure aggregation is a **simulation** of pairwise masking, not production SecAgg. DP numbers are real Opacus RDP accounting, but with only 5 institutions strong ε destroys utility — the tradeoff chart is the honest result.
+- The VFL demo is a benchmark: PSI alignment + a pooled logistic model on aligned features. It is not end-to-end split learning.
+- Neo4j contains only derived, pseudonymised intelligence; `ARTH_DATA_HASH_KEY` must be a private stable secret before any real deployment.
+
 ## Requirements
 
 - Docker Desktop with Compose, or Node.js 20+ and Python 3.11+

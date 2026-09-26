@@ -21,13 +21,14 @@ def ingest(run_id=None, max_rows=15000):
     normal = source[source["isFraud"] == 0].sample(min(max_rows - len(fraud), len(source) - len(fraud)), random_state=42)
     frame = pd.concat([fraud, normal]).head(max_rows).copy()
     scored = score_frame(frame, run_id)
-    frame["score"] = scored["scores"]
+    frame["score"] = scored["risk_scores"]
     frame["band"] = scored["risk_band"]
+    frame["flagged"] = (frame["score"] >= 0.95).astype(int)
     accounts = pd.concat([
         frame[["customer_id", "institution_id", "score", "band"]].rename(columns={"customer_id": "pid"}),
         frame[["counterparty_id", "score", "band"]].assign(institution_id=-1).rename(columns={"counterparty_id": "pid"}),
     ]).groupby("pid", as_index=False).agg(institution_id=("institution_id", "max"), score=("score", "max"), band=("band", "last"))
-    edges = frame.groupby(["customer_id", "counterparty_id"], as_index=False).agg(n_tx=("amount", "size"), total_amt=("amount", "sum"), max_amt=("amount", "max"), avg_risk=("score", "mean")).rename(columns={"customer_id": "source", "counterparty_id": "target"})
+    edges = frame.groupby(["customer_id", "counterparty_id"], as_index=False).agg(n_tx=("amount", "size"), total_amt=("amount", "sum"), max_amt=("amount", "max"), avg_risk=("score", "mean"), frac_flagged=("flagged", "mean")).rename(columns={"customer_id": "source", "counterparty_id": "target"})
     graph = nx.Graph()
     graph.add_weighted_edges_from((row.source, row.target, float(row.n_tx)) for row in edges.itertuples())
     communities = nx.community.louvain_communities(graph, weight="weight", seed=42)
@@ -36,18 +37,22 @@ def ingest(run_id=None, max_rows=15000):
     campaigns = []
     for cluster, members in enumerate(communities):
         scores = [account_map.get(pid, 0.0) for pid in members]
-        campaigns.append({"id": cluster, "label": "Risk ring #{}".format(cluster + 1), "size": len(members), "avg_score": float(np.mean(scores)), "n_high": int(sum(score >= 0.7 for score in scores))})
+        campaigns.append({"id": cluster, "label": "Risk ring #{}".format(cluster + 1), "size": len(members), "avg_score": float(np.mean(scores)), "n_high": int(sum(score >= 0.95 for score in scores))})
     campaigns = sorted(campaigns, key=lambda item: (item["n_high"], item["avg_score"], item["size"]), reverse=True)[:25]
     campaign_ids = {item["id"] for item in campaigns}
     driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
     with driver.session() as session:
+        session.run("CREATE CONSTRAINT acct_pid IF NOT EXISTS FOR (a:Account) REQUIRE a.pid IS UNIQUE")
+        session.run("CREATE CONSTRAINT inst_id IF NOT EXISTS FOR (i:Institution) REQUIRE i.id IS UNIQUE")
+        session.run("CREATE CONSTRAINT camp_id IF NOT EXISTS FOR (c:Campaign) REQUIRE c.id IS UNIQUE")
+        session.run("CREATE INDEX acct_score IF NOT EXISTS FOR (a:Account) ON (a.risk_score)")
         session.run("MATCH (n:Account) DETACH DELETE n")
         session.run("MATCH (n:Campaign) DETACH DELETE n")
         session.run("UNWIND range(0,4) AS id MERGE (:Institution {id:id, name:'Bank ' + toString(id)})")
         for batch in chunks(accounts):
             session.run("UNWIND $rows AS row MERGE (account:Account {pid:row.pid}) SET account.risk_score=row.score, account.risk_band=row.band, account.institution_id=row.institution_id WITH account,row WHERE row.institution_id >= 0 MATCH (institution:Institution {id:row.institution_id}) MERGE (account)-[:BELONGS_TO]->(institution)", rows=batch)
         for batch in chunks(edges):
-            session.run("UNWIND $rows AS row MATCH (source:Account {pid:row.source}), (target:Account {pid:row.target}) MERGE (source)-[edge:TRANSFERRED_TO]->(target) SET edge.n_tx=row.n_tx, edge.total_amt=row.total_amt, edge.max_amt=row.max_amt, edge.avg_risk=row.avg_risk", rows=batch)
+            session.run("UNWIND $rows AS row MATCH (source:Account {pid:row.source}), (target:Account {pid:row.target}) MERGE (source)-[edge:TRANSFERRED_TO]->(target) SET edge.n_tx=row.n_tx, edge.total_amt=row.total_amt, edge.max_amt=row.max_amt, edge.avg_risk=row.avg_risk, edge.frac_flagged=row.frac_flagged", rows=batch)
         session.run("UNWIND $rows AS row MATCH (account:Account {pid:row.pid}) SET account.cluster_id=row.cluster", rows=community_rows)
         session.run("UNWIND $rows AS row MERGE (campaign:Campaign {id:row.id}) SET campaign.label=row.label, campaign.size=row.size, campaign.avg_score=row.avg_score, campaign.n_high=row.n_high", rows=campaigns)
         session.run("MATCH (account:Account) WHERE account.cluster_id IN $ids MATCH (campaign:Campaign {id:account.cluster_id}) MERGE (account)-[:MEMBER_OF]->(campaign)", ids=list(campaign_ids))

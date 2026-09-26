@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-from arth_fl.dp_accounting import epsilon_after_rounds
+from arth_fl.dp_accounting import epsilon_after_rounds, noise_for_target_epsilon
 from arth_fl.federated import jobs
 from data.schema import SCHEMAS
 from models.inference import available_runs, citizen_profile, customer_sample, fairness_report, resolve_run, score_frame
@@ -30,9 +30,17 @@ class FLStartRequest(BaseModel):
     rounds: int = Field(8, ge=1, le=50)
     local_epochs: int = Field(1, ge=1, le=5)
     dp_enabled: bool = False
-    dp_noise_multiplier: float = Field(2.5, gt=0)
-    dp_clipping_norm: float = Field(1.0, gt=0)
+    dp_noise_multiplier: float = Field(0.45, gt=0)
+    dp_clipping_norm: float = Field(2.0, gt=0)
+    target_epsilon: Optional[float] = Field(None, gt=0)
     secagg_enabled: bool = True
+    fraction_train: float = Field(1.0, gt=0, le=1.0)
+    proximal_mu: float = Field(0.05, ge=0)
+    server_lr: float = Field(0.5, gt=0)
+    learning_rate: float = Field(3e-3, gt=0)
+    batch_size: int = Field(512, ge=16, le=8192)
+    client_sample_cap: int = Field(60000, ge=1000)
+    test_sample_cap: int = Field(160000, ge=1000)
     run_id: Optional[str] = None
 
 
@@ -75,7 +83,15 @@ def start_federated(request: FLStartRequest):
         "dp-enabled": request.dp_enabled,
         "dp-noise-multiplier": request.dp_noise_multiplier,
         "dp-clipping-norm": request.dp_clipping_norm,
+        "target-epsilon": request.target_epsilon,
         "secagg-enabled": request.secagg_enabled,
+        "fraction-train": request.fraction_train,
+        "proximal-mu": request.proximal_mu,
+        "server-lr": request.server_lr,
+        "learning-rate": request.learning_rate,
+        "batch-size": request.batch_size,
+        "client-sample-cap": request.client_sample_cap,
+        "test-sample-cap": request.test_sample_cap,
         "run-id": request.run_id,
     }
     return {"run_id": jobs.start(config), "status": "running"}
@@ -156,8 +172,17 @@ def privacy_tradeoff():
 
 
 @app.get("/privacy/epsilon")
-def privacy_epsilon(noise: float = 2.5, rounds: int = 8, delta: float = 1e-5):
-    return {"epsilon": epsilon_after_rounds(noise, rounds, 1.0, delta), "delta": delta, "noise_multiplier": noise, "rounds": rounds, "scope": "client-update central DP estimate under full participation"}
+def privacy_epsilon(noise: float = 0.45, rounds: int = 8, delta: float = 1e-5,
+                  fraction_train: float = 1.0, target_epsilon: Optional[float] = None):
+    if target_epsilon is not None:
+        noise = noise_for_target_epsilon(target_epsilon, rounds, fraction_train, delta)
+    return {"epsilon": epsilon_after_rounds(noise, rounds, fraction_train, delta), "delta": delta,
+            "noise_multiplier": noise, "rounds": rounds, "fraction_train": fraction_train,
+            "scope": "client-update central DP estimate (RDP accountant)"}
+
+
+def _not_found(error):
+    raise HTTPException(404, str(error))
 
 
 @app.post("/predict")
@@ -171,22 +196,34 @@ def predict(request: PredictRequest):
         if column not in frame:
             frame[column] = "PAYMENT"
     frame[schema.target] = 0
-    return score_frame(frame, request.run_id, request.dataset, request.explain)
+    try:
+        return score_frame(frame, request.run_id, request.dataset, request.explain)
+    except FileNotFoundError as error:
+        _not_found(error)
 
 
 @app.get("/customers/{dataset}/{run_id}/sample")
 def customers(dataset: str, run_id: str, n: int = 50, client_id: Optional[int] = None):
-    return customer_sample(None if run_id == "latest" else run_id, dataset, n, client_id)
+    try:
+        return customer_sample(None if run_id == "latest" else run_id, dataset, n, client_id)
+    except FileNotFoundError as error:
+        _not_found(error)
 
 
 @app.get("/citizen/{customer_ref}")
 def citizen(customer_ref: str, run_id: Optional[str] = None):
-    return citizen_profile(customer_ref, run_id)
+    try:
+        return citizen_profile(customer_ref, run_id)
+    except FileNotFoundError as error:
+        _not_found(error)
 
 
 @app.get("/fairness")
 def fairness(run_id: Optional[str] = None):
-    return fairness_report(run_id)
+    try:
+        return fairness_report(run_id)
+    except FileNotFoundError as error:
+        _not_found(error)
 
 
 @app.post("/graph/seed", dependencies=[Depends(internal)])

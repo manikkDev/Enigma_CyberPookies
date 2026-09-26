@@ -45,8 +45,12 @@ def resolve_run(run_id=None):
 
 
 def _predict_proba(matrix, archive):
-    from arth_fl.federated import forward
-    return forward(matrix, archive["params"], archive["layer_sizes"].tolist())
+    from models.calibrate import apply_temperature
+    from models.torch_mlp import build_model, predict_logits, unpack_state
+    model = unpack_state(build_model(matrix.shape[1]), archive["params"])
+    logits = predict_logits(model, matrix)
+    temperature = float(archive["temperature"]) if "temperature" in archive.files else 1.0
+    return apply_temperature(logits, temperature)
 
 
 def _occlusion_explanations(matrix, probabilities, archive, schema, top=8):
@@ -64,16 +68,28 @@ def _occlusion_explanations(matrix, probabilities, archive, schema, top=8):
     return explanations
 
 
+def _percentile(probabilities, archive):
+    """Map calibrated probabilities to population percentiles 0..1."""
+    if "score_quantiles" not in archive.files:
+        return probabilities
+    quantiles = archive["score_quantiles"]
+    return np.searchsorted(quantiles, np.clip(probabilities, quantiles[0], quantiles[-1]), side="right") / (len(quantiles) - 1)
+
+
 def score_frame(frame, run_id=None, dataset="paysim_banks", explain=False):
     directory, summary = resolve_run(run_id)
     archive = np.load(directory / "global_model.npz")
     schema = SCHEMAS[dataset]
     matrix = frame_to_matrix(frame, schema, archive["mean"], archive["scale"])
     probabilities = _predict_proba(matrix, archive)
-    result = {"run_id": summary["run_id"], "scores": probabilities.tolist(), "risk_band": ["high" if value >= 0.7 else "medium" if value >= 0.3 else "low" for value in probabilities]}
+    scores = _percentile(probabilities, archive)
+    result = {"run_id": summary["run_id"], "scores": probabilities.tolist(),
+              "risk_scores": scores.tolist(),
+              "score_semantics": "risk_score is the calibrated probability's percentile within the scored population",
+              "risk_band": ["high" if value >= 0.95 else "medium" if value >= 0.75 else "low" for value in scores]}
     if explain:
         result["explanations"] = _occlusion_explanations(matrix, probabilities, archive, schema)
-        result["explanation_method"] = "feature occlusion: score change when each feature is set to its population mean"
+        result["explanation_method"] = "feature occlusion: change in calibrated probability when each feature is set to its population mean"
     return result
 
 
@@ -90,25 +106,34 @@ def customer_sample(run_id=None, dataset="paysim_banks", n=50, client_id=None):
     scored = score_frame(frame, run_id, dataset, explain=False)
     columns = [schema.id_col, schema.client_col, schema.target, "amount", "type", "hour", "amt_to_bal_ratio"]
     rows = frame[columns].to_dict("records")
-    for row, score, band in zip(rows, scored["scores"], scored["risk_band"]):
-        row.update({"score": score, "risk_band": band})
+    for row, score, probability, band in zip(rows, scored["risk_scores"], scored["scores"], scored["risk_band"]):
+        row.update({"score": score, "probability": probability, "risk_band": band})
     return {"run_id": scored["run_id"], "rows": rows}
 
 
 def citizen_profile(customer_ref, run_id=None, dataset="paysim_banks"):
+    """Deterministic demo mapping: a citizen's customerRef selects one account in
+    the scored test population; we surface that account's riskiest transaction."""
     frame = test_frame(dataset)
-    index = int(hashlib.sha256(str(customer_ref).encode()).hexdigest(), 16) % len(frame)
-    row = frame.iloc[[index]].copy()
-    scored = score_frame(row, run_id, dataset, explain=True)
     schema = SCHEMAS[dataset]
+    index = int(hashlib.sha256(str(customer_ref).encode()).hexdigest(), 16) % len(frame)
+    account = frame.iloc[index][schema.id_col]
+    account_rows = frame[frame[schema.id_col] == account]
+    scored_all = score_frame(account_rows, run_id, dataset, explain=False)
+    peak = int(np.argmax(scored_all["risk_scores"]))
+    row = account_rows.iloc[[peak]].copy()
+    scored = score_frame(row, run_id, dataset, explain=True)
     return {
         "run_id": scored["run_id"],
         "customer_ref": customer_ref,
-        "pseudonymous_account": row.iloc[0][schema.id_col],
-        "score": scored["scores"][0],
+        "pseudonymous_account": account,
+        "score": scored["risk_scores"][0],
+        "probability": scored["scores"][0],
         "risk_band": scored["risk_band"][0],
         "explanation": scored["explanations"][0],
-        "facts": {"transaction_type": row.iloc[0]["type"], "amount": float(row.iloc[0]["amount"]), "institution": int(row.iloc[0][schema.client_col])},
+        "facts": {"transaction_type": row.iloc[0]["type"], "amount": float(row.iloc[0]["amount"]),
+                  "hour": int(row.iloc[0]["hour"]), "institution": int(row.iloc[0][schema.client_col]),
+                  "transactions_reviewed": int(len(account_rows))},
         "guidance": ["Review repayment dates and keep scheduled payments current", "Report unfamiliar transactions immediately", "Keep contact and income information up to date"],
         "disclaimer": "This educational risk signal is not a lending decision or guarantee.",
     }

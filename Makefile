@@ -1,4 +1,4 @@
-.PHONY: up down logs health data partitions baseline fl fl-dp experiments test
+.PHONY: up down logs health data partitions validate-data vfl-partitions baseline fl fl-dp experiments test
 up:
 	docker compose up -d --build
 down:
@@ -10,9 +10,13 @@ health:
 	curl --fail http://localhost:5002/api/health
 	curl --fail http://localhost:5001/health
 data:
-	cd ml-fl-service && python -m data.download && python -m data.features
+	cd ml-fl-service && python -m data.download --only paysim_banks && python -m data.features paysim_banks
 partitions:
-	cd ml-fl-service && python -m data.partition --dataset paysim_banks --clients 5 --mode hfl
+	cd ml-fl-service && python -m data.partition --dataset paysim_banks --clients 5 --mode hfl --seed 42
+validate-data:
+	cd ml-fl-service && python -m data.validate --dataset paysim_banks --clients 5
+vfl-partitions:
+	cd ml-fl-service && python -m data.partition --dataset paysim_banks --mode vfl --seed 42
 baseline:
 	cd ml-fl-service && python -m models.baselines --dataset paysim_banks
 fl:

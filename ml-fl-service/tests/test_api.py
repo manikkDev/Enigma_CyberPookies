@@ -9,6 +9,6 @@ def test_health() -> None:
     assert response.json() == {
         "ok": True,
         "service": "ml-fl-service",
-        "phase": 0,
+        "phase": 1,
         "port": 8000,
     }

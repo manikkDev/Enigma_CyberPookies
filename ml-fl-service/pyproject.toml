@@ -8,14 +8,14 @@ version = "0.1.0"
 description = "Federated financial risk model for Arth Saathi"
 requires-python = ">=3.10"
 dependencies = [
-  "flwr[simulation]>=1.20,<2.0",
-  "torch>=2.2",
-  "numpy>=1.26",
-  "pandas>=2.2",
-  "pyarrow>=15",
-  "scikit-learn>=1.4",
-  "opacus>=1.5",
-  "httpx>=0.27",
+  "flwr[simulation]>=1.20,<1.21",
+  "torch>=2.7.1,<2.8",
+  "numpy>=2.0,<2.1",
+  "pandas>=2.2,<2.3",
+  "pyarrow>=17,<18",
+  "scikit-learn>=1.5,<1.6",
+  "opacus>=1.5,<1.6",
+  "httpx>=0.28,<0.29",
 ]
 
 [tool.hatch.build.targets.wheel]

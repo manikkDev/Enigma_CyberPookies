@@ -5,9 +5,11 @@ import http from "http";
 import { Server } from "socket.io";
 import connectDB from "./config/db.js";
 import routes from "./routes/index.js";
+import seedDemoUsers from "./seedDemoUsers.js";
 
 // Connect to database
 await connectDB();
+await seedDemoUsers();
 
 const app = express();
 const PORT = process.env.PORT || 5002;

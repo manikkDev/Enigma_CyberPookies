@@ -59,12 +59,15 @@ The platform now implements the full loop end to end:
 
 1. Start the stack: `docker compose up -d` → all six services healthy; `make health` returns 200×3.
 2. Seed artifacts if `ml-fl-service/runs/` is empty: `docker compose run --rm ml-fl-service python -m experiments.seed_demo` (or locally: `.venv/bin/python -m experiments.seed_demo`). Writes baselines, `demo_fedprox` (default model), three DP tradeoff runs, VFL summary, and the Neo4j graph.
-3. Sign up at `localhost:3000/signup` as **analyst** (institution 0–4) → `/analyst` shows FL vs isolated vs centralized PR-AUC, the privacy posture, and the priority review queue.
+3. Log in at `localhost:3000/login` — two demo accounts are seeded automatically on server boot (disable with `SEED_DEMO_USERS=0`), and the login page has one-click buttons for both:
+   - **Bank employee**: `analyst@arthsaathi.demo` / `Analyst@123` → lands on `/analyst`, scoped to institution 2.
+   - **Citizen**: `citizen@arthsaathi.demo` / `Citizen@123` → lands on `/citizen`.
+   You can also sign up manually (`/signup`) and pick "Bank employee" + an institution.
 4. `/analyst/fl` → toggle DP, watch the live ε estimate, start a run, see per-round PR-AUC convergence against the isolated mean.
 5. `/analyst/graph` → Neo4j risk rings (only pseudonymous IDs); click through campaign members.
 6. `/analyst/fairness` → per-institution PR-AUC / false-positive-rate spread (operational fairness — PaySim has no demographics).
 7. `/analyst/customers/[id]` → per-account score, occlusion feature contributions, graph neighbours, recommended action.
-8. Sign up as **citizen** → `/citizen` shows a plain-language risk gauge and explanations; `/citizen/consent` exercises purpose toggles + erasure request (DPDP); `/chat` talks to the copilot.
+8. Open the citizen side with the seeded `citizen@arthsaathi.demo` login → `/citizen` shows a plain-language risk gauge and explanations; `/citizen/consent` exercises purpose toggles + erasure request (DPDP); `/chat` talks to the copilot.
 9. Judges' verification: `curl localhost:5001/api/fl/runs` without a token → 401; `curl localhost:8000/datasets` → partition metadata; `runs/` JSON files reproduce every headline number.
 
 ## Honest limitations

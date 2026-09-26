@@ -29,10 +29,11 @@ const GoogleLogo = () => (
   </svg>
 )
 
-// Demo credentials
-const DEMO_CREDENTIALS = {
-        //nun
-} as const
+// Demo credentials seeded by the server (server/src/seedDemoUsers.js)
+const DEMO_CREDENTIALS = [
+  { key: "analyst", label: "Bank employee", detail: "Bank 2 risk analyst", email: "analyst@arthsaathi.demo", password: "Analyst@123" },
+  { key: "citizen", label: "Citizen", detail: "Retail customer view", email: "citizen@arthsaathi.demo", password: "Citizen@123" },
+] as const
 
 export function LoginForm({
   className,
@@ -86,6 +87,20 @@ export function LoginForm({
     }
 
     onSubmit?.(e)
+  }
+
+  const handleDemoLogin = async (demo: (typeof DEMO_CREDENTIALS)[number]) => {
+    setIsLoading(true)
+    try {
+      const { success, error } = await login(demo.email, demo.password)
+      if (!success) {
+        toast.error(error || "Demo login failed", {
+          description: "Run the stack with Docker Compose so the server can seed demo accounts.",
+        })
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleGoogleSignIn = async () => {
@@ -196,6 +211,22 @@ export function LoginForm({
             {isLoading ? "Signing in..." : "Login"}
           </Button>
         </Field>
+        <FieldSeparator>Demo access</FieldSeparator>
+        <div className="grid grid-cols-2 gap-2">
+          {DEMO_CREDENTIALS.map((demo) => (
+            <Button
+              key={demo.key}
+              type="button"
+              variant="outline"
+              disabled={isLoading}
+              onClick={() => handleDemoLogin(demo)}
+              className="h-auto flex-col items-start gap-0.5 px-3 py-2 text-left"
+            >
+              <span className="text-sm font-medium">{demo.label}</span>
+              <span className="text-xs text-muted-foreground">{demo.detail}</span>
+            </Button>
+          ))}
+        </div>
         <FieldSeparator>Or continue with</FieldSeparator>
         <Field>
           <Button

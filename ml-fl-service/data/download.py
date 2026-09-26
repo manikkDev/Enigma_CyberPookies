@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 
+from settings import settings
+
 RAW = Path(__file__).resolve().parent / "raw"
 HF_REPO = "flwrlabs/fed-fraud-paysim-banks"
 HF_API = "https://huggingface.co/api/datasets"
@@ -60,7 +62,7 @@ def download_paysim_banks(revision: str = "main") -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     repo = _json_url("{}/{}".format(HF_API, HF_REPO))
     resolved_revision = repo.get("sha", revision)
-    tree = _json_url("{}/{}/tree/{}?recursive=true&expand=false".format(HF_API, HF_REPO, revision))
+    tree = _json_url("{}/{}/tree/{}?recursive=true&expand=false".format(HF_API, HF_REPO, resolved_revision))
     parquet_files = [entry for entry in tree if entry.get("type") == "file" and entry["path"].startswith("data/") and entry["path"].endswith(".parquet")]
     if not parquet_files:
         raise RuntimeError("No Parquet files found in Hugging Face dataset {}".format(HF_REPO))
@@ -101,7 +103,7 @@ def _safe_extract(archive: Path, destination: Path) -> None:
 
 
 def _kaggle_credentials_available() -> bool:
-    return bool(os.getenv("KAGGLE_USERNAME") and os.getenv("KAGGLE_KEY")) or (Path.home() / ".kaggle" / "kaggle.json").exists()
+    return bool(settings.KAGGLE_USERNAME and settings.KAGGLE_KEY) or (Path.home() / ".kaggle" / "kaggle.json").exists()
 
 
 def download_gmsc() -> Path:
@@ -112,7 +114,10 @@ def download_gmsc() -> Path:
         return destination
     if not _kaggle_credentials_available():
         raise RuntimeError("Give Me Some Credit requires Kaggle credentials in ~/.kaggle/kaggle.json or KAGGLE_USERNAME/KAGGLE_KEY")
-    subprocess.run(["kaggle", "competitions", "download", "-c", "GiveMeSomeCredit", "-p", str(destination)], check=True)
+    environment = os.environ.copy()
+    if settings.KAGGLE_USERNAME and settings.KAGGLE_KEY:
+        environment.update({"KAGGLE_USERNAME": settings.KAGGLE_USERNAME, "KAGGLE_KEY": settings.KAGGLE_KEY})
+    subprocess.run(["kaggle", "competitions", "download", "-c", "GiveMeSomeCredit", "-p", str(destination)], check=True, env=environment)
     archives = list(destination.glob("*.zip"))
     for archive in archives:
         _safe_extract(archive, destination)

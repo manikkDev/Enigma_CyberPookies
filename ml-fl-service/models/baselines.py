@@ -46,8 +46,8 @@ def run(key="paysim_banks", clients=5, train_cap=150000, test_cap=200000, runs_d
         validations.append(validation)
         model = fit_model(train, validation, key, seed + client)
         isolated[str(client)] = all_metrics(y_test, model.predict_proba(x_test)[:, 1])
-    central_train = sample_frame(pd.concat(trains, ignore_index=True), schema.target, train_cap * 2, seed)
-    central_validation = sample_frame(pd.concat(validations, ignore_index=True), schema.target, max(50000, train_cap // 2), seed)
+    central_train = pd.concat(trains, ignore_index=True).sample(frac=1, random_state=seed).reset_index(drop=True)
+    central_validation = pd.concat(validations, ignore_index=True).sample(frac=1, random_state=seed).reset_index(drop=True)
     central = fit_model(central_train, central_validation, key, seed)
     centralized = all_metrics(y_test, central.predict_proba(x_test)[:, 1])
     numeric_metrics = [key for key, value in centralized.items() if isinstance(value, (int, float)) and key != "n"]

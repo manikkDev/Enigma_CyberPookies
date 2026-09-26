@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -32,11 +33,11 @@ class FLStartRequest(BaseModel):
     dp_noise_multiplier: float = Field(2.5, gt=0)
     dp_clipping_norm: float = Field(1.0, gt=0)
     secagg_enabled: bool = True
-    run_id: str | None = None
+    run_id: Optional[str] = None
 
 
 class PredictRequest(BaseModel):
-    run_id: str | None = None
+    run_id: Optional[str] = None
     dataset: str = "paysim_banks"
     rows: list[dict]
     explain: bool = False
@@ -151,21 +152,21 @@ def predict(request: PredictRequest):
 
 
 @app.get("/customers/{dataset}/{run_id}/sample")
-def customers(dataset: str, run_id: str, n: int = 50, client_id: int | None = None):
+def customers(dataset: str, run_id: str, n: int = 50, client_id: Optional[int] = None):
     return customer_sample(None if run_id == "latest" else run_id, dataset, n, client_id)
 
 
 @app.get("/citizen/{customer_ref}")
-def citizen(customer_ref: str, run_id: str | None = None):
+def citizen(customer_ref: str, run_id: Optional[str] = None):
     return citizen_profile(customer_ref, run_id)
 
 
 @app.get("/fairness")
-def fairness(run_id: str | None = None):
+def fairness(run_id: Optional[str] = None):
     return fairness_report(run_id)
 
 
 @app.post("/graph/seed", dependencies=[Depends(internal)])
-def seed_graph(run_id: str | None = None, max_rows: int = 15000):
+def seed_graph(run_id: Optional[str] = None, max_rows: int = 15000):
     from graph.ingest import ingest
     return ingest(run_id, max_rows)

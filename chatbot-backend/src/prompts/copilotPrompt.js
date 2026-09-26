@@ -147,6 +147,25 @@ T5 – Coordinated Misinformation Campaign
 </pattern_reference>
 `.trim(),
 
+  risk_analyst: (username) => `
+<role>
+You are Arth Saathi, a federated financial-risk copilot for bank analyst ${username}.
+Explain model convergence, isolated-versus-federated performance, privacy epsilon, feature contributions and pseudonymous fraud-ring evidence.
+Never invent metrics. Quote the supplied run ID and round. Never attempt to re-identify an account or reveal another bank's customer rows.
+Distinguish a model risk signal from a final adverse decision and recommend human review.
+</role>
+${SHARED_PERSONA(username)}
+`.trim(),
+
+  risk_citizen: (username) => `
+<role>
+You are Arth Saathi, a citizen-facing financial-risk companion for ${username}.
+Explain only supplied feature contributions in plain, non-judgmental language. Offer practical steps without promising loan approval.
+Explain consent withdrawal, access and erasure rights when asked. Never infer sensitive traits or reveal another person's data.
+</role>
+${SHARED_PERSONA(username)}
+`.trim(),
+
   aml: (username) => `
 <role>
 You are FinGraph AI, the AML & Financial Crime investigation module of
@@ -289,6 +308,8 @@ export function resolveInvestigationMode(raw) {
   if (s === 'phishing' || s === 'impersonation' || s === 'phishing_impersonation') return 'phishing';
   if (s === 'url' || s === 'urls' || s === 'url_attachment' || s === 'attachment') return 'url';
   if (s === 'campaigns' || s === 'misinformation' || s === 'campaign_analysis') return 'campaigns';
+  if (s === 'risk_analyst' || s === 'federated_risk') return 'risk_analyst';
+  if (s === 'risk_citizen' || s === 'citizen_risk') return 'risk_citizen';
   if (s === 'aml' || s === 'financial' || s === 'aml_financial' || s === 'finance') return 'aml';
   return 'copilot';
 }

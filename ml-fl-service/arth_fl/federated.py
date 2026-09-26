@@ -64,7 +64,7 @@ def _secure_weighted_average(updates, counts, seed):
             weighted[right] -= mask
     aggregate = np.sum(weighted, axis=0) / sum(counts)
     width = updates[0][0].size
-    return aggregate[:width].reshape(updates[0][0].shape), aggregate[width:].reshape(updates[0][1].shape)
+    return aggregate[:width].reshape(updates[0][0].shape).astype(np.float32), aggregate[width:].reshape(updates[0][1].shape).astype(np.float32)
 
 
 def run_federated(config, stop_event=None):
@@ -91,9 +91,10 @@ def run_federated(config, stop_event=None):
     test = sample_frame(pd.read_parquet(root / "test.parquet"), schema.target, int(config.get("test-sample-cap", 160000)), seed)
     test_matrix = frame_to_matrix(test, schema, mean, scale)
     test_labels = test[schema.target].to_numpy(np.int8)
-    coef = np.zeros((1, matrices[0].shape[1]), dtype=np.float64)
-    intercept = np.zeros(1, dtype=np.float64)
+    coef = np.zeros((1, matrices[0].shape[1]), dtype=np.float32)
+    intercept = np.zeros(1, dtype=np.float32)
     progress = Progress(settings.RUNS_DIR, run_id, settings.PROGRESS_WEBHOOK, settings.NODE_INTERNAL_TOKEN)
+    progress.path.write_text("")
     normalized_config = {**config, "run-id": run_id, "dataset": dataset, "strategy": strategy, "num-server-rounds": rounds, "dp-enabled": dp_enabled, "secagg-enabled": secagg}
     progress.emit({"run_id": run_id, "event": "start", "config": normalized_config})
     rng = np.random.default_rng(seed)
@@ -117,11 +118,11 @@ def run_federated(config, stop_event=None):
             coef_delta, intercept_delta = _secure_weighted_average(updates, counts, seed + server_round)
         else:
             total = sum(counts)
-            coef_delta = sum(update[0] * count for update, count in zip(updates, counts)) / total
-            intercept_delta = sum(update[1] * count for update, count in zip(updates, counts)) / total
+            coef_delta = (sum(update[0] * count for update, count in zip(updates, counts)) / total).astype(np.float32)
+            intercept_delta = (sum(update[1] * count for update, count in zip(updates, counts)) / total).astype(np.float32)
         if dp_enabled:
-            coef_delta += rng.normal(0, noise * clip / clients, size=coef_delta.shape)
-            intercept_delta += rng.normal(0, noise * clip / clients, size=intercept_delta.shape)
+            coef_delta += rng.normal(0, noise * clip / clients, size=coef_delta.shape).astype(np.float32)
+            intercept_delta += rng.normal(0, noise * clip / clients, size=intercept_delta.shape).astype(np.float32)
         coef += coef_delta
         intercept += intercept_delta
         probability = 1 / (1 + np.exp(-np.clip(test_matrix @ coef.T + intercept, -30, 30))).ravel()

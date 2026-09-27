@@ -469,11 +469,13 @@ export async function handleChatGenerate(req, res) {
         .single();
 
       if (convError) {
-        console.error("Error creating conversation:", convError);
-        return res.status(500).json({ error: "Failed to create conversation" });
+        // Supabase expects UUID user_ids while JWT users carry Mongo ObjectIds;
+        // degrade to an ephemeral conversation instead of failing the request.
+        console.warn("Conversation persistence unavailable, continuing without saving:", convError.message || convError);
+        currentConversationId = crypto.randomUUID();
+      } else {
+        currentConversationId = conversation.id;
       }
-
-      currentConversationId = conversation.id;
     }
 
     // Get last 10 messages for context
@@ -687,11 +689,13 @@ export async function handleChatStreamGenerate(req, res) {
         .single();
 
       if (convError) {
-        console.error("Error creating conversation:", convError);
-        return res.status(500).json({ error: "Failed to create conversation" });
+        // Supabase expects UUID user_ids while JWT users carry Mongo ObjectIds;
+        // degrade to an ephemeral conversation instead of failing the stream.
+        console.warn("Conversation persistence unavailable, streaming without saving:", convError.message || convError);
+        currentConversationId = crypto.randomUUID();
+      } else {
+        currentConversationId = conversation.id;
       }
-
-      currentConversationId = conversation.id;
     }
 
     // Get conversation history for context (if we are not resetting due to file uploads)
@@ -1292,8 +1296,9 @@ export async function getConversations(req, res) {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching conversations:", error);
-      return res.status(500).json({ error: "Failed to fetch conversations" });
+      // Ephemeral-mode users (Mongo ObjectId JWTs) have no Supabase rows.
+      console.warn("Conversations unavailable, returning empty list:", error.message || error);
+      return res.json([]);
     }
 
     res.json(conversations);

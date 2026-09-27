@@ -411,7 +411,7 @@ function ChatPageContent() {
   const loadConversations = useCallback(async () => {
     setIsHistoryLoading(true)
     try {
-      const response = await fetch(`${CHAT_API_BASE}/conversations`)
+      const response = await fetch(`${CHAT_API_BASE}/conversations`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to load conversations")
@@ -499,7 +499,7 @@ function ChatPageContent() {
     setIsHistoryOpen(false)
     setIsProfileOpen(false)
     try {
-      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`)
+      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to load conversation")
@@ -522,7 +522,7 @@ function ChatPageContent() {
     event?.preventDefault()
     event?.stopPropagation()
     try {
-      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`, { method: "DELETE" })
+      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`, { method: "DELETE", headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to delete conversation")
@@ -577,13 +577,14 @@ function ChatPageContent() {
         Array.from(attachments).forEach((file) => formData.append("files", file, file.name))
         response = await fetch(`${CHAT_API_BASE}/stream`, {
           method: "POST",
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: formData,
           signal: abortControllerRef.current.signal,
         })
       } else {
         response = await fetch(`${CHAT_API_BASE}/stream`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ prompt: userContent, options: { includeYouTube, includeImageSearch, investigationMode, analysisContext: analysisContext || undefined } }),
           signal: abortControllerRef.current.signal,
         })

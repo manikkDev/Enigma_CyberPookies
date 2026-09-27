@@ -47,7 +47,7 @@ for (const envPath of envPaths) {
     console.log('Error loading .env from', envPath, ':', e.message);
   }
 }
-
+// test
 if (!envLoaded) {
   console.error('Failed to load .env file from any location');
 }

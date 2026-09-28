@@ -32,6 +32,7 @@ const envPaths = [
   join(__dirname, '.env'),
   join(process.cwd(), '.env')
 ];
+// cuhhh
 
 let envLoaded = false;
 for (const envPath of envPaths) {

@@ -720,9 +720,9 @@ const HeroSection = () => {
                   fontWeight: 400,
                 }}
               >
-                Zero raw data
+                Verifiable privacy
               </em>
-              <span style={{ fontWeight: 900 }}> shared.</span>
+              <span style={{ fontWeight: 900 }}> by design.</span>
             </h1>
 
             <p
@@ -735,7 +735,7 @@ const HeroSection = () => {
                 margin: "0 auto 32px",
               }}
             >
-              Arth Saathi lets banks, insurers and lenders jointly train fraud and credit-risk models with federated learning — every customer row stays inside its institution, with secure aggregation, differential privacy and citizen consent built in.
+              Arth Saathi is a research prototype for collaborative fraud and credit-risk modelling. It demonstrates federated strategies, measured differential-privacy trade-offs, pseudonymised graph intelligence and citizen controls while production-grade institution isolation and secure aggregation are validated.
             </p>
 
             <div
@@ -918,7 +918,7 @@ const HeroSection = () => {
                 opacity: 0.55,
               }}
             >
-              FEDERATED NETWORK · 5 INSTITUTIONS · SECURE AGGREGATION
+              RESEARCH NETWORK · 5 SIMULATED INSTITUTIONS · VERIFIED ARTIFACTS
             </p>
           </div>
         </div>

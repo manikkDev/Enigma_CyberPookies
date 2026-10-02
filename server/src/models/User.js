@@ -38,6 +38,11 @@ const userSchema = new mongoose.Schema(
             sparse: true,
             default: () => crypto.randomBytes(12).toString('hex'),
         },
+        erasedAt: {
+            type: Date,
+            default: null,
+            index: true,
+        },
     },
     {
         timestamps: true,

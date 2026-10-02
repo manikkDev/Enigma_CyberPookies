@@ -70,17 +70,9 @@ PAYSIM = Schema(
     ],
     categorical=["type"],
     vfl_groups={
-        "bank": ["amount", "oldbalanceOrg", "newbalanceOrig", "orig_delta", "amt_to_bal_ratio"],
-        "lending_app": ["type", "hour", "is_night", "orig_tx_count_24", "orig_amt_sum_24", "amt_log"],
-        "insurer": [
-            "oldbalanceDest",
-            "newbalanceDest",
-            "dest_delta",
-            "dest_zero_before",
-            "dest_in_degree",
-            "dest_out_degree",
-            "orig_pagerank",
-        ],
+        "bank": ["amount", "amt_log", "amt_to_bal_ratio", "oldbalanceOrg", "type"],
+        "lending_app": ["hour", "is_night", "orig_tx_count_24", "orig_amt_sum_24"],
+        "insurer": ["oldbalanceDest", "dest_in_degree", "dest_out_degree", "orig_pagerank"],
     },
 )
 

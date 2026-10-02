@@ -1,7 +1,6 @@
 // src/controllers/chatController.js
 import fetch from "node-fetch";
 import xlsx from "xlsx";
-import { createClient } from "@supabase/supabase-js";
 import {
   generateContent,
   buildRequestBody,
@@ -12,8 +11,11 @@ import {
 } from "../helpers/gemini.js";
 import { searchImages } from "../helpers/imageSearch.js";
 import { buildAmlAssistantPrompt } from "../prompts/FinancialAI.js";
-import { buildCopilotPrompt, resolveInvestigationMode } from "../prompts/copilotPrompt.js";
+import { buildCopilotPrompt } from "../prompts/copilotPrompt.js";
 import { buildRiskContext } from "../helpers/riskContext.js";
+import { conversations } from "../helpers/conversationStore.js";
+import { detectIntents, deterministicFallback, formatToolContext, runTools } from "../helpers/copilotTools.js";
+import { resolveAuthorizedInvestigationMode } from "../helpers/riskMode.js";
 import YouTubeMCP from "../helpers/youtubeSearch.js";
 import env from "../config/env.js";
 import { processMermaidBlocks } from "../helpers/mermaid.js";
@@ -25,7 +27,6 @@ import {
   isSocialSearchEnabled,
 } from "../helpers/socialSearch.js";
 
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
 const FEATHERLESS_MODEL = env.FEATHERLESS_MODEL || "Qwen/Qwen2.5-32B-Instruct";
 
 // Initialize YouTube MCP
@@ -227,27 +228,7 @@ async function structureTransactionsWithOpenAI(rawRows) {
   return parsed;
 }
 
-function addSuspiciousScore(structured) {
-  const addScore = (row) => ({
-    ...row,
-    sus_detection: Math.floor(Math.random() * 101),
-  });
-
-  if (Array.isArray(structured)) {
-    return structured.map(addScore);
-  }
-
-  if (structured && Array.isArray(structured.transactions)) {
-    return {
-      ...structured,
-      transactions: structured.transactions.map(addScore),
-    };
-  }
-
-  if (structured && typeof structured === "object") {
-    return { ...structured, sus_detection: Math.floor(Math.random() * 101) };
-  }
-
+function keepTransactionsUnscored(structured) {
   return structured;
 }
 
@@ -261,8 +242,8 @@ async function buildTransactionContextFromUploads(files = []) {
   if (!rows.length) return null;
 
   const structured = await structureTransactionsWithOpenAI(rows);
-  const scored = addSuspiciousScore(structured);
-  let contextText = JSON.stringify(scored, null, 2);
+  const unscored = keepTransactionsUnscored(structured);
+  let contextText = JSON.stringify(unscored, null, 2);
 
   if (contextText.length > MAX_TRANSACTION_CONTEXT_CHARS) {
     contextText = contextText.slice(0, MAX_TRANSACTION_CONTEXT_CHARS);
@@ -273,7 +254,7 @@ async function buildTransactionContextFromUploads(files = []) {
     contextText,
     rowCount: rows.length,
     structured,
-    scored,
+    unscored,
   };
 }
 
@@ -432,23 +413,25 @@ export async function handleChatGenerate(req, res) {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
+    const investigationMode = resolveAuthorizedInvestigationMode(options.investigationMode || options.mode, req.user);
+    if (!investigationMode) {
+      return res.status(403).json({ error: "This copilot mode is not available for your role" });
+    }
+    const isRiskMode = investigationMode === "risk_analyst" || investigationMode === "risk_citizen";
+
     // userId is set by optionalAuth middleware
     const userId = req.userId;
     let currentConversationId = conversationId;
 
     // After getting the userId from req.userId
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("username, email")
-      .eq("id", userId)
-      .single();
+    const userData = await conversations.profile(req).catch(() => null);
 
-    if (userError) {
-      console.error("Error fetching user data:", userError);
+    if (!userData) {
+      console.error("Error fetching user data from the application identity service");
       // Handle error or continue without username
     }
 
-    const username = userData?.username || "User";
+    const username = userData?.name || userData?.email || "User";
     const userEmail = userData?.email || "";
 
     console.log("[handleChatGenerate] User info:", {
@@ -459,35 +442,26 @@ export async function handleChatGenerate(req, res) {
 
     // If no conversation ID provided, create a new conversation
     if (!currentConversationId) {
-      const { data: conversation, error: convError } = await supabase
-        .from("conversations")
-        .insert({
-          user_id: userId,
-          title: prompt.substring(0, 50) + (prompt.length > 50 ? "..." : ""),
-        })
-        .select()
-        .single();
+      const conversation = await conversations.create(
+        req,
+        prompt.substring(0, 50) + (prompt.length > 50 ? "..." : ""),
+      );
 
-      if (convError) {
-        // Supabase expects UUID user_ids while JWT users carry Mongo ObjectIds;
-        // degrade to an ephemeral conversation instead of failing the request.
-        console.warn("Conversation persistence unavailable, continuing without saving:", convError.message || convError);
-        currentConversationId = crypto.randomUUID();
+      if (!conversation?.id) {
+        // Mongo identities own conversations in the authoritative application store.
+        // A chat request fails closed if durable ownership cannot be established.
+        throw new Error("Conversation persistence is unavailable");
       } else {
         currentConversationId = conversation.id;
       }
     }
 
     // Get last 10 messages for context
-    const { data: messages, error: historyError } = await supabase
-      .from("messages")
-      .select("role, content, sources, images, videos, excalidraw")
-      .eq("conversation_id", currentConversationId)
-      .order("created_at", { ascending: false })
-      .limit(10);
+    const conversationHistory = await conversations.get(req, currentConversationId);
+    const messages = (conversationHistory.messages || []).slice(-10).reverse();
 
-    if (historyError) {
-      console.error("Error fetching history:", historyError);
+    if (!Array.isArray(messages)) {
+      console.error("Error fetching history from the application conversation store");
       return res
         .status(500)
         .json({ error: "Failed to fetch conversation history" });
@@ -504,9 +478,21 @@ export async function handleChatGenerate(req, res) {
     const uploads = Array.isArray(req.files) ? req.files : [];
     const transactionContext =
       await buildTransactionContextFromUploads(uploads);
-    const modelPrompt = transactionContext
-      ? `${prompt}\n\n--- Structured Transactions (with sus_detection) ---\n${transactionContext.contextText}`
-      : prompt;
+
+    // Risk modes: detect + execute authorized tools first so the model composes
+    // its answer over labeled evidence rather than improvising numbers.
+    const toolResults = isRiskMode
+      ? await runTools(req, detectIntents(prompt, investigationMode))
+      : [];
+    const toolContext = formatToolContext(toolResults);
+
+    const modelPrompt = [
+      prompt,
+      transactionContext
+        ? `--- Structured Transactions (unscored; do not infer a model score) ---\n${transactionContext.contextText}`
+        : "",
+      toolContext,
+    ].filter(Boolean).join("\n\n");
 
     // Add current user message to history
     chatHistory.push({
@@ -515,21 +501,41 @@ export async function handleChatGenerate(req, res) {
     });
 
     // Determine includeSearch: default true (enable web search even with files)
-    const effectiveIncludeSearch =
-      typeof options.includeSearch === "boolean" ? options.includeSearch : true;
+    const effectiveIncludeSearch = isRiskMode
+      ? false
+      : typeof options.includeSearch === "boolean" ? options.includeSearch : true;
+    const analysisContext = isRiskMode
+      ? await buildRiskContext(req, investigationMode).catch(() => null)
+      : options.analysisContext || null;
+    const systemPrompt = buildCopilotPrompt(investigationMode, username, analysisContext);
 
-    // Generate AI response
-    const response = await generateContent(modelPrompt, userId, {
-      history: chatHistory.slice(-10), // Only keep last 10 messages for context
-      includeSearch: effectiveIncludeSearch,
-      uploads,
-      username,
-      // Reset history when new files arrive unless explicitly kept
-      resetHistory: uploads.length > 0 && options.keepHistoryWithFiles !== true,
-    });
+    // Generate AI response — degrade to deterministic tool output in risk modes
+    // if the provider fails, so numeric claims are never fabricated.
+    let response;
+    try {
+      response = await generateContent(modelPrompt, userId, {
+        history: chatHistory.slice(-10), // Only keep last 10 messages for context
+        includeSearch: effectiveIncludeSearch,
+        uploads,
+        username,
+        systemPrompt,
+        // Reset history when new files arrive unless explicitly kept
+        resetHistory: uploads.length > 0 && options.keepHistoryWithFiles !== true,
+      });
+    } catch (llmError) {
+      if (!isRiskMode) throw llmError;
+      console.warn("[copilot] LLM call failed, using deterministic fallback:", llmError?.message);
+      response = null;
+    }
+    // generateContent resolves with an error payload instead of throwing, so
+    // detect that here as well — risk modes must show tool evidence, not a raw error.
+    if (isRiskMode && response?.error) {
+      console.warn("[copilot] LLM response degraded:", response.error);
+      response = null;
+    }
 
     const processingTime = Date.now() - start;
-    const includeImageSearch = options.includeImageSearch !== false;
+    const includeImageSearch = !isRiskMode && options.includeImageSearch !== false;
     const contextualImageQuery = buildContextualSearchQuery({
       prompt,
       history: messages,
@@ -557,9 +563,12 @@ export async function handleChatGenerate(req, res) {
       finalContent =
         "I've created a flowchart for you. You can view, download, or expand it below.";
     }
+    if (isRiskMode && !finalContent) {
+      finalContent = deterministicFallback(toolResults, investigationMode);
+    }
 
     let socialPayload = null;
-    if (shouldIncludeSocial(prompt, options)) {
+    if (!isRiskMode && shouldIncludeSocial(prompt, options)) {
       console.log("[socialSearch] running (non-stream) for prompt:", prompt);
       const socialResults = await searchSocialProfiles(prompt, {
         location: options.location,
@@ -572,34 +581,28 @@ export async function handleChatGenerate(req, res) {
       socialPayload = { socials: socialResults || [], reason };
     }
 
-    const { error: saveError } = await supabase.from("messages").insert([
+    const saveResult = await conversations.append(req, currentConversationId, [
       {
-        conversation_id: currentConversationId,
         role: "user",
         content: prompt,
         sources: [],
-        images: null,
+        images: [],
       },
       {
-        conversation_id: currentConversationId,
         role: "model",
         content: finalContent,
         sources: aiSources,
-        images: imageResults.length > 0 ? imageResults : null,
-        excalidraw: aiExcalidrawData, // Store in new column
+        images: imageResults.length > 0 ? imageResults : [],
+        excalidraw: aiExcalidrawData || [], // Store in new column
       },
     ]);
 
-    if (saveError) {
-      console.error("Error saving messages:", saveError);
+    if (!saveResult?.ok) {
+      console.error("Error saving messages to the application conversation store");
       // Don't fail the request, just log the error
     }
 
-    // Optionally bump conversation updated_at
-    await supabase
-      .from("conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", currentConversationId);
+    // Conversation append updates the authoritative updated_at timestamp.
 
     const apiResponse = {
       content: finalContent,
@@ -614,6 +617,9 @@ export async function handleChatGenerate(req, res) {
       processingTime,
       attempts: response?.attempts || 1,
       conversationId: currentConversationId,
+      mode: investigationMode,
+      evidence: toolResults.map((r) => ({ tool: r.tool, label: r.label, ok: r.ok, evidence_id: r.evidence_id, summary: r.summary })),
+      llm_degraded: isRiskMode && !response,
     };
 
     res.json(apiResponse);
@@ -647,28 +653,32 @@ export async function handleChatStreamGenerate(req, res) {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
+    const investigationMode = resolveAuthorizedInvestigationMode(options.investigationMode || options.mode, req.user);
+    if (!investigationMode) {
+      return res.status(403).json({ error: "This copilot mode is not available for your role" });
+    }
+    const isRiskMode = investigationMode === "risk_analyst" || investigationMode === "risk_citizen";
+
     const userId = req.userId;
     let currentConversationId = conversationId;
     let streamedContent = "";
     const streamedSources = new Set();
     let finalSourcesWithTitles = []; // Store final sources to save to DB
     let streamedExcalidrawData = []; // Capture generated charts
+    let streamedGraphData = null; // Neo4j mini-graph payload for the chat
+    const executedFunctionCalls = []; // name/args/result for the follow-up turn
     let streamComplete = false; // Track if we received finishReason: "STOP" or "MAX_TOKENS"
     let lastFinishReason = null; // Store the finish reason for validation
 
     // After getting the userId from req.userId
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("username, email")
-      .eq("id", userId)
-      .single();
+    const userData = await conversations.profile(req).catch(() => null);
 
-    if (userError) {
-      console.error("Error fetching user data:", userError);
+    if (!userData) {
+      console.error("Error fetching user data from the application identity service");
       // Handle error or continue without username
     }
 
-    const username = userData?.username || "User";
+    const username = userData?.name || userData?.email || "User";
     const userEmail = userData?.email || "";
 
     console.log("[handleChatStreamGenerate] User info:", {
@@ -679,20 +689,15 @@ export async function handleChatStreamGenerate(req, res) {
 
     // If no conversation ID provided, create a new conversation
     if (!currentConversationId) {
-      const { data: conversation, error: convError } = await supabase
-        .from("conversations")
-        .insert({
-          user_id: userId,
-          title: prompt.substring(0, 50) + (prompt.length > 50 ? "..." : ""),
-        })
-        .select()
-        .single();
+      const conversation = await conversations.create(
+        req,
+        prompt.substring(0, 50) + (prompt.length > 50 ? "..." : ""),
+      );
 
-      if (convError) {
-        // Supabase expects UUID user_ids while JWT users carry Mongo ObjectIds;
-        // degrade to an ephemeral conversation instead of failing the stream.
-        console.warn("Conversation persistence unavailable, streaming without saving:", convError.message || convError);
-        currentConversationId = crypto.randomUUID();
+      if (!conversation?.id) {
+        // Mongo identities own conversations in the authoritative application store.
+        // A stream fails closed if durable ownership cannot be established.
+        throw new Error("Conversation persistence is unavailable");
       } else {
         currentConversationId = conversation.id;
       }
@@ -705,20 +710,16 @@ export async function handleChatStreamGenerate(req, res) {
 
     let messages = [];
     if (keepHistory) {
-      const { data: historyMessages, error: historyError } = await supabase
-        .from("messages")
-        .select("role, content, sources, images, videos")
-        .eq("conversation_id", currentConversationId)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const history = await conversations.get(req, currentConversationId);
+      const historyMessages = (history.messages || []).slice(-10).reverse();
 
-      if (historyError) {
-        console.error("Error fetching history:", historyError);
+      if (!Array.isArray(historyMessages)) {
+        console.error("Error fetching history from the application conversation store");
         return res
           .status(500)
           .json({ error: "Failed to fetch conversation history" });
       }
-      messages = historyMessages || [];
+      messages = historyMessages;
     }
 
     // Build chat history for Gemini (prior messages)
@@ -731,6 +732,12 @@ export async function handleChatStreamGenerate(req, res) {
 
     const hasExcelFiles = files.some(isExcelLikeFile);
     const transactionContext = await buildTransactionContextFromUploads(files);
+
+    // Risk modes: run authorized tools first; results are evidence, not prose.
+    const toolResults = isRiskMode
+      ? await runTools(req, detectIntents(prompt, investigationMode))
+      : [];
+    const toolContext = formatToolContext(toolResults);
 
     // If uploads provided via multipart/form-data, include their extracted text and images
     let composedText = String(prompt);
@@ -760,7 +767,10 @@ export async function handleChatStreamGenerate(req, res) {
     }
 
     if (transactionContext?.contextText) {
-      composedText += `\n\n--- Structured Transactions (with sus_detection) ---\n${transactionContext.contextText}`;
+      composedText += `\n\n--- Structured Transactions (unscored; do not infer a model score) ---\n${transactionContext.contextText}`;
+    }
+    if (toolContext) {
+      composedText += `\n\n${toolContext}`;
     }
 
     // Add current user message (text + any image inlineData)
@@ -771,20 +781,17 @@ export async function handleChatStreamGenerate(req, res) {
     });
 
     // Default includeSearch to true (enable web search even with files)
-    const includeSearch =
-      typeof options.includeSearch === "boolean" ? options.includeSearch : true;
-    const includeImageSearch = options.includeImageSearch !== false;
-    const includeYouTube = options.includeYouTube === true; // Opt-in for YouTube search
+    const includeSearch = isRiskMode
+      ? false
+      : typeof options.includeSearch === "boolean" ? options.includeSearch : true;
+    const includeImageSearch = !isRiskMode && options.includeImageSearch !== false;
+    const includeYouTube = !isRiskMode && options.includeYouTube === true; // Opt-in for YouTube search
 
     // Mode-aware system prompt — supports multi-domain copilot + legacy AML
-    const investigationMode = resolveInvestigationMode(options.investigationMode || options.mode);
-    let analysisContext = options.analysisContext || null;
-    if (!analysisContext && (investigationMode === "risk_analyst" || investigationMode === "risk_citizen")) {
-      // Inject live platform context so the copilot quotes real metrics.
-      analysisContext = await buildRiskContext(req, investigationMode).catch(() => null);
-    }
-    const systemPrompt = options.systemPrompt
-      || buildCopilotPrompt(investigationMode, username, analysisContext);
+    const analysisContext = isRiskMode
+      ? await buildRiskContext(req, investigationMode).catch(() => null)
+      : options.analysisContext || null;
+    const systemPrompt = buildCopilotPrompt(investigationMode, username, analysisContext);
     const uploadContext = uploadedText ? uploadedText.slice(0, 400) : "";
     const contextualSearchQuery = buildContextualSearchQuery({
       prompt,
@@ -843,6 +850,31 @@ export async function handleChatStreamGenerate(req, res) {
     res.write(`event: investigationMode\n`);
     res.write(`data: ${JSON.stringify({ mode: investigationMode, hasAnalysisContext: !!analysisContext })}\n\n`);
 
+    // Emit tool evidence so the UI can render citation cards immediately
+    if (toolResults.length) {
+      res.write(`event: evidence\n`);
+      res.write(`data: ${JSON.stringify({ evidence: toolResults.map((r) => ({ tool: r.tool, label: r.label, ok: r.ok, evidence_id: r.evidence_id, summary: r.summary })) })}\n\n`);
+
+      // Surface Neo4j data as an inline mini-graph in the chat — account
+      // neighborhoods (center + neighbors) or a fraud-ring subgraph
+      // (nodes + edges) depending on which tools fired.
+      const neighborhood = toolResults.find(
+        (r) => r.ok && r.tool === "account_neighborhood" && r.data?.neighbors?.length,
+      );
+      const campaignRing = toolResults.find(
+        (r) => r.ok && r.tool === "campaigns" && r.data?.subgraph?.nodes?.length,
+      );
+      streamedGraphData = neighborhood
+        ? { kind: "neighborhood", center: neighborhood.data.center, neighbors: neighborhood.data.neighbors.slice(0, 20) }
+        : campaignRing
+          ? { kind: "ring", label: campaignRing.data.subgraph.label, nodes: campaignRing.data.subgraph.nodes, edges: campaignRing.data.subgraph.edges }
+          : null;
+      if (streamedGraphData) {
+        res.write(`event: graph\n`);
+        res.write(`data: ${JSON.stringify({ graph: streamedGraphData })}\n\n`);
+      }
+    }
+
     if (transactionContext?.structured) {
       res.write(`event: transactions\n`);
       res.write(
@@ -864,7 +896,7 @@ export async function handleChatStreamGenerate(req, res) {
       );
     }
     const mlPrompt = mlContextParts.join("\n\n").trim();
-    if (mlPrompt) {
+    if (mlPrompt && !isRiskMode) {
       Promise.resolve()
         .then(() => generateMlSchema(mlPrompt))
         .then((ml) => {
@@ -904,9 +936,16 @@ export async function handleChatStreamGenerate(req, res) {
 
     if (!upstream.ok || !upstream.body) {
       const txt = await upstream.text().catch(() => "");
+      if (isRiskMode) {
+        // Deterministic degradation: answer from tool evidence only.
+        const fallback = deterministicFallback(toolResults, investigationMode);
+        streamedContent = fallback;
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify({ text: fallback })}\n\n`);
+      }
       res.write(`event: error\n`);
       res.write(
-        `data: ${JSON.stringify({ status: upstream.status, error: txt || upstream.statusText })}\n\n`,
+        `data: ${JSON.stringify({ status: upstream.status, error: txt || upstream.statusText, degraded: isRiskMode })}\n\n`,
       );
       return res.end();
     }
@@ -933,6 +972,8 @@ export async function handleChatStreamGenerate(req, res) {
               res.write(`event: message\n`);
               res.write(`data: ${JSON.stringify({ text: p.text })}\n\n`);
             }
+
+
 
             // Executable code
             if (
@@ -984,6 +1025,15 @@ export async function handleChatStreamGenerate(req, res) {
                   // Capture for DB save
                   streamedExcalidrawData.push(flowchartData);
 
+                  // Record for the follow-up turn so the model can describe it
+                  executedFunctionCalls.push({
+                    name: p.functionCall.name,
+                    args: p.functionCall.args || {},
+                    response: {
+                      result: `Flowchart generated successfully with ${flowchartData?.elements?.length || 0} elements. It is rendered interactively below your answer.`,
+                    },
+                  });
+
                   // Emit excalidraw event
                   res.write(`event: excalidraw\n`);
                   res.write(
@@ -1005,6 +1055,11 @@ export async function handleChatStreamGenerate(req, res) {
                     "[chatStream] Error generating Excalidraw:",
                     error,
                   );
+                  executedFunctionCalls.push({
+                    name: p.functionCall.name,
+                    args: p.functionCall.args || {},
+                    response: { error: `Flowchart generation failed: ${error.message}` },
+                  });
                   const errorMsg = `\n\n[Note: Failed to generate flowchart: ${error.message}]`;
                   streamedContent += errorMsg;
                   res.write(`event: message\n`);
@@ -1065,20 +1120,31 @@ export async function handleChatStreamGenerate(req, res) {
       }
     };
 
-    upstream.body.on("data", async (chunk) => {
+    // Serialize SSE block processing: function calls (e.g., Excalidraw via Groq)
+    // are async and can outlive the upstream "end" event. Without this queue the
+    // "end" handler would see an empty streamedContent and emit a premature
+    // fallback message before the flowchart finishes.
+    let processingQueue = Promise.resolve();
+
+    upstream.body.on("data", (chunk) => {
       const chunkStr = chunk.toString();
-      sseBuffer += chunkStr;
+      processingQueue = processingQueue.then(async () => {
+        sseBuffer += chunkStr;
 
-      // Split into SSE blocks; last block may be incomplete and stays in buffer
-      const blocks = sseBuffer.split(/\r?\n\r?\n/);
-      sseBuffer = blocks.pop() || "";
+        // Split into SSE blocks; last block may be incomplete and stays in buffer
+        const blocks = sseBuffer.split(/\r?\n\r?\n/);
+        sseBuffer = blocks.pop() || "";
 
-      for (const block of blocks) {
-        await processSSEBlock(block);
-      }
+        for (const block of blocks) {
+          await processSSEBlock(block);
+        }
+      });
     });
 
     upstream.body.on("end", async () => {
+      // Wait for any in-flight block processing (function calls) to finish
+      await processingQueue.catch(() => {});
+
       console.log("Gemini stream ended");
       console.log(
         `[chatStream] Stream completion status: streamComplete=${streamComplete}, lastFinishReason=${lastFinishReason}, contentLength=${streamedContent.length}`,
@@ -1091,16 +1157,102 @@ export async function handleChatStreamGenerate(req, res) {
         sseBuffer = "";
       }
 
+      // Second turn: if the model invoked function calls, hand the results back
+      // so it can write real explanatory prose around the generated artifact —
+      // otherwise the answer is just the diagram with no narrative.
+      if (executedFunctionCalls.length > 0) {
+        try {
+          const followupBody = {
+            contents: [
+              ...chatHistory.slice(-10),
+              {
+                role: "model",
+                parts: executedFunctionCalls.map((fc) => ({
+                  functionCall: { name: fc.name, args: fc.args },
+                })),
+              },
+              {
+                role: "user",
+                parts: [
+                  ...executedFunctionCalls.map((fc) => ({
+                    functionResponse: { name: fc.name, response: fc.response },
+                  })),
+                  {
+                    text: "Describe the tool result to the user in plain prose (2-4 sentences or a short bullet list). Do NOT output raw JSON, code blocks, function names, or the literal functionResponse payload.",
+                  },
+                ],
+              },
+            ],
+            systemInstruction: systemPrompt
+              ? { role: "system", parts: [{ text: systemPrompt }] }
+              : undefined,
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+          };
+
+          const followupResp = await fetch(
+            `${BASE_URL}/${MODEL_ID}:generateContent?key=${env.GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(followupBody),
+            },
+          );
+
+          if (followupResp.ok) {
+            const followupData = await followupResp.json();
+            let followupText = (followupData?.candidates?.[0]?.content?.parts || [])
+              .map((part) => part.text)
+              .filter((t) => typeof t === "string")
+              .join("")
+              .trim();
+            // Strip any code block that leaks the internal tool payload
+            // (functionResponse/functionCall JSON or the raw Excalidraw schema).
+            followupText = followupText
+              .replace(/```[\w-]*\n?[\s\S]*?```/g, (block) =>
+                /functionResponse|functionCall|generate_excalidraw_flowchart|"elements"\s*:\s*\[/.test(block)
+                  ? ""
+                  : block,
+              )
+              .replace(/\n{3,}/g, "\n\n")
+              .trim();
+            if (followupText) {
+              const separator = streamedContent ? "\n\n" : "";
+              streamedContent += separator + followupText;
+              if (!res.writableEnded) {
+                res.write(`event: message\n`);
+                res.write(`data: ${JSON.stringify({ text: separator + followupText })}\n\n`);
+              }
+            }
+          } else {
+            console.warn("[chatStream] function-call follow-up HTTP", followupResp.status);
+          }
+        } catch (followupError) {
+          console.warn(
+            "[chatStream] function-call follow-up failed:",
+            followupError?.message || followupError,
+          );
+        }
+      }
+
       try {
         if (!streamedContent) {
-          const fallbackMessage =
-            "I couldn't generate a response from the model for that upload. Try a smaller file or add a specific question.";
+          const fallbackMessage = isRiskMode
+            ? deterministicFallback(toolResults, investigationMode)
+            : "I couldn't generate a response from the model for that upload. Try a smaller file or add a specific question.";
           streamedContent = fallbackMessage;
           if (!res.writableEnded) {
             res.write(`event: message\n`);
             res.write(`data: ${JSON.stringify({ text: fallbackMessage })}\n\n`);
           }
         }
+
+        // Strip hallucinated pseudo tool-call markup (<tool_code>…</tool_code>)
+        // before persisting — internal protocol, never user-facing text.
+        streamedContent = streamedContent
+          .replace(/<tool_(code|call|response|result|output)>[\s\S]*?(<\/tool_\1>|$)/gi, "")
+          .replace(/<function_(call|response|result)>[\s\S]*?(<\/function_\1>|$)/gi, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
 
         let mermaidProcessingResult = { content: streamedContent, blocks: [] };
         try {
@@ -1123,7 +1275,7 @@ export async function handleChatStreamGenerate(req, res) {
           );
         }
 
-        if (shouldIncludeSocial(prompt, options)) {
+        if (!isRiskMode && shouldIncludeSocial(prompt, options)) {
           console.log("[socialSearch] running (stream) for prompt:", prompt);
           const socialResults = await searchSocialProfiles(prompt, {
             location: options.location,
@@ -1201,27 +1353,25 @@ export async function handleChatStreamGenerate(req, res) {
           `[chatStream] Saving to database: contentLength=${streamedContent.length}, sourcesCount=${finalSourcesWithTitles.length}, streamComplete=${streamComplete}`,
         );
 
-        const { error: saveError } = await supabase.from("messages").insert([
+        const saveResult = await conversations.append(req, currentConversationId, [
           {
-            conversation_id: currentConversationId,
             role: "user",
             content: prompt,
             sources: [],
           },
           {
-            conversation_id: currentConversationId,
             role: "model",
             content: streamedContent,
             sources: finalSourcesWithTitles,
             images: imageResults,
-            videos: youtubeVideos.length > 0 ? youtubeVideos : null,
-            excalidraw:
-              streamedExcalidrawData.length > 0 ? streamedExcalidrawData : null,
+            videos: youtubeVideos,
+            excalidraw: streamedExcalidrawData,
+            graph: streamedGraphData,
           },
         ]);
 
-        if (saveError) {
-          console.error("Error saving streamed messages:", saveError);
+        if (!saveResult?.ok) {
+          console.error("Error saving streamed messages to the application conversation store");
         } else {
           console.log(
             `[chatStream] Successfully saved messages with ${finalSourcesWithTitles.length} sources and ${streamedContent.length} characters`,
@@ -1229,10 +1379,7 @@ export async function handleChatStreamGenerate(req, res) {
         }
 
         // Update conversation timestamp
-        await supabase
-          .from("conversations")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", currentConversationId);
+        console.log(`[chatStream] Conversation ${currentConversationId} persisted`);
       } catch (dbError) {
         console.error("Database error after streaming:", dbError);
       }
@@ -1289,22 +1436,18 @@ export async function getConversations(req, res) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { data: conversations, error } = await supabase
-      .from("conversations")
-      .select("id, title, created_at, updated_at")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false });
+    const storedConversations = await conversations.list(req);
 
-    if (error) {
-      // Ephemeral-mode users (Mongo ObjectId JWTs) have no Supabase rows.
-      console.warn("Conversations unavailable, returning empty list:", error.message || error);
-      return res.json([]);
+    if (!Array.isArray(storedConversations)) {
+      // Mongo-authenticated users always use the authoritative application store.
+      console.warn("Conversations unavailable from the application store");
+      return res.status(503).json({ error: "Conversation persistence unavailable" });
     }
 
-    res.json(conversations);
+    res.json(storedConversations);
   } catch (error) {
     console.error("Error in getConversations:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(error.status || 500).json({ error: error.message || "Internal server error" });
   }
 }
 
@@ -1318,53 +1461,36 @@ export async function getConversationHistory(req, res) {
     }
 
     // Fetch conversation and verify ownership (if user is authenticated)
-    const { data: conversation, error: convError } = await supabase
-      .from("conversations")
-      .select("id, user_id, title, created_at, updated_at")
-      .eq("id", conversationId)
-      .single();
+    const conversation = await conversations.get(req, conversationId);
 
-    if (convError || !conversation) {
+    if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
     if (userId && conversation.user_id && conversation.user_id !== userId) {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const { data: messages, error: messagesError } = await supabase
-      .from("messages")
-      .select(
-        "id, role, content, sources, charts, images, videos, excalidraw, created_at",
-      )
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true });
+    const messages = conversation.messages || [];
 
-    if (messagesError) {
-      console.error("Error fetching conversation history:", messagesError);
+    if (!Array.isArray(messages)) {
+      console.error("Error fetching conversation history from the application store");
       return res
         .status(500)
         .json({ error: "Failed to fetch conversation history" });
     }
 
-    res.json({
-      id: conversation.id,
-      title: conversation.title,
-      user_id: conversation.user_id,
-      created_at: conversation.created_at,
-      updated_at: conversation.updated_at,
-      messages: messages || [],
-    });
+    res.json({ ...conversation, messages });
   } catch (error) {
     console.error("Error in getConversationHistory:", error);
     const isNetwork = (error?.message || "")
       .toLowerCase()
       .includes("fetch failed");
-    res.status(isNetwork ? 503 : 500).json({
+    res.status(error.status || (isNetwork ? 503 : 500)).json({
       error: isNetwork
-        ? "Supabase network error while fetching conversation"
+        ? "Application-store network error while fetching conversation"
         : error.message,
       hint: isNetwork
-        ? "Verify SUPABASE_URL/SUPABASE_ANON_KEY and internet connectivity on the server"
+        ? "Verify GRAPH_API_URL and application API connectivity"
         : undefined,
     });
   }
@@ -1384,13 +1510,9 @@ export async function deleteConversation(req, res) {
     }
 
     // Verify ownership
-    const { data: conversation, error: convError } = await supabase
-      .from("conversations")
-      .select("id, user_id")
-      .eq("id", conversationId)
-      .single();
+    const conversation = await conversations.get(req, conversationId);
 
-    if (convError || !conversation) {
+    if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
     if (conversation.user_id !== userId) {
@@ -1398,31 +1520,19 @@ export async function deleteConversation(req, res) {
     }
 
     // Delete messages first
-    const { error: msgDelError } = await supabase
-      .from("messages")
-      .delete()
-      .eq("conversation_id", conversationId);
-    if (msgDelError) {
-      console.error("Error deleting messages:", msgDelError);
+    const deleted = await conversations.remove(req, conversationId);
+    if (!deleted?.success) {
+      console.error("Error deleting conversation messages from the application store");
       return res
         .status(500)
         .json({ error: "Failed to delete conversation messages" });
     }
 
     // Delete conversation
-    const { error: convDelError } = await supabase
-      .from("conversations")
-      .delete()
-      .eq("id", conversationId);
-    if (convDelError) {
-      console.error("Error deleting conversation:", convDelError);
-      return res.status(500).json({ error: "Failed to delete conversation" });
-    }
-
     return res.json({ success: true });
   } catch (error) {
     console.error("Error in deleteConversation:", error);
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 }
 

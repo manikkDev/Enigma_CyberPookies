@@ -7,7 +7,7 @@ import { dirname, join } from 'path';
 import geminiRouter from "./routers/geminiRouter.js";
 import userRouter from "./routers/userRouter.js";
 import chatRouter from "./routers/chatRouter.js";
-// import speechRouter from "./routers/speechRouter.js";
+import speechRouter from "./routers/speechRouter.js";
 import { createUploadsDir } from "./utils/fileUpload.js";
 import uploadRouter from "./routers/uploadRouter.js";
 import youtubeRouter from "./routers/youtubeRouter.js";
@@ -63,8 +63,7 @@ console.log('Environment variables:', {
 
 // Validate required environment variables
 if (!process.env.GEMINI_API_KEY) {
-  console.error('FATAL: GEMINI_API_KEY environment variable is required');
-  process.exit(1);
+  console.warn('GEMINI_API_KEY is not configured; authenticated FL APIs remain available while copilot generation is disabled');
 }
 
 // Create uploads directory
@@ -108,7 +107,7 @@ app.use(express.urlencoded({ extended: true })); // handles form-encoded bodies 
 // Routes
 app.use("/api/gemini", geminiRouter);
 app.use("/api/users", userRouter);
-// app.use("/api/speech", speechRouter);
+app.use("/api/speech", speechRouter);
 app.use("/api", uploadRouter); // exposes POST /api/upload
 app.use("/api/youtube", youtubeRouter); // MCP (Model Context Protocol) endpoints
 app.use("/api/chat", chatRouter); // Chat endpoints
@@ -127,7 +126,11 @@ app.use("/api/fl", flRouter);
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "chatbot-backend", phase: 0 });
+  res.json({ ok: true, service: "chatbot-backend", phase: "foundation-hardening", capabilities: {
+    fl_gateway: true,
+    risk_copilot: Boolean(process.env.GEMINI_API_KEY),
+    conversation_store: "application_api",
+  } });
 });
 app.get("/", (req, res) => {
   res.send("✅ API service is running");

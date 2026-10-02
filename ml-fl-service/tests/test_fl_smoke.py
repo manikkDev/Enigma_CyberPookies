@@ -74,6 +74,8 @@ def test_federated_smoke_two_clients_two_rounds(synthetic_partitions):
     assert np.isfinite(summary["final"]["pr_auc"])
     assert np.isfinite(summary["final"]["roc_auc"])
     assert summary["federated_statistics"]["raw_rows_shared"] is False
+    assert summary["evaluation"]["final_split"] == "official_full_test"
+    assert summary["evaluation"]["test_observed_during_training"] is False
     directory = Path(runs) / "smoke_test"
     assert (directory / "global_model.npz").exists()
     events = [json.loads(line) for line in (directory / "metrics.jsonl").read_text().splitlines()]
@@ -81,6 +83,7 @@ def test_federated_smoke_two_clients_two_rounds(synthetic_partitions):
     round_event = events[1]
     assert set(round_event["clients"].keys()) == {"0", "1"}
     assert "val_pr_auc" in round_event["clients"]["0"]
+    assert round_event["evaluation_split"] == "federated_validation"
 
 
 def test_federated_dp_run_reports_epsilon(synthetic_partitions):

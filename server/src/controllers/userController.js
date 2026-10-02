@@ -13,14 +13,11 @@ const generateToken = (user) => signToken(
 // @access  Public
 export const googleAuth = async (req, res) => {
   try {
-    const { name, email, password, code, role = "citizen", institutionId = null } = req.body || {};
-    if (!["citizen", "analyst"].includes(role)) {
-      return res.status(400).json({ message: "Role must be citizen or analyst" });
+    const { name, email, password, code, role = "citizen" } = req.body || {};
+    if (role !== "citizen") {
+      return res.status(403).json({ message: "Bank employee accounts require an institution invitation" });
     }
-    const normalizedInstitutionId = role === "analyst" ? Number(institutionId) : null;
-    if (role === "analyst" && (!Number.isInteger(normalizedInstitutionId) || normalizedInstitutionId < 0 || normalizedInstitutionId > 4)) {
-      return res.status(400).json({ message: "Bank employees must select an institution from 0 to 4" });
-    }
+    const normalizedInstitutionId = null;
 
     let resolvedName = name;
     let resolvedEmail = email;

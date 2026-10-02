@@ -35,9 +35,10 @@ export const ENDPOINTS = {
 
   // Federated learning
   fl: `${MAIN_API}/api/fl`,
-  flStream: (runId) => `${ML_API}/fl/stream/${runId}`,
+  flStream: (runId) => `${MAIN_API}/api/fl/stream/${runId}`,
 
   // Risk graph
+  riskGraphMeta: `${GRAPH_API}/api/risk-graph/meta`,
   riskGraphOverview: `${GRAPH_API}/api/risk-graph/overview`,
   riskGraphCampaigns: `${GRAPH_API}/api/risk-graph/campaigns`,
   riskGraphCampaign: (id) => `${GRAPH_API}/api/risk-graph/campaign/${id}`,

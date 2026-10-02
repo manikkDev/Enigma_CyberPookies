@@ -8,8 +8,8 @@ import { api } from "@/lib/api";
 const labels = {
   risk_scoring: ["Risk scoring", "Calculate and explain your personal risk signal"],
   fraud_monitoring: ["Fraud monitoring", "Detect suspicious activity and protect your account"],
-  model_training: ["Local model training", "Use your records inside your institution to improve its model"],
-  cross_institution_fl: ["Federated collaboration", "Contribute privacy-protected model updates across institutions"],
+  model_training: ["Local model training", "Record your preference for future consent-aware training eligibility"],
+  cross_institution_fl: ["Federated collaboration", "Record your preference for future cross-institution model-update participation"],
 };
 
 function Consent() {
@@ -26,7 +26,9 @@ function Consent() {
   const update = async (purpose, granted) => {
     try {
       await api.consent.set(purpose, granted);
-      setNotice(granted ? "Consent granted — scoring resumes." : "Consent withdrawn — scoring is paused immediately.");
+      setNotice(purpose === "risk_scoring"
+        ? granted ? "Risk-scoring consent granted — scoring is available." : "Risk-scoring consent withdrawn — scoring is blocked immediately."
+        : `Your ${labels[purpose]?.[0] || purpose} preference was recorded. Production data-pipeline enforcement is pending.`);
       await load();
     } catch (reason) {
       setError(reason.message);
@@ -45,7 +47,7 @@ function Consent() {
   const erase = async () => {
     try {
       const result = await api.consent.erase();
-      setTicket(result.ticketId);
+      setTicket(result);
     } catch (reason) {
       setError(reason.message);
     }
@@ -55,7 +57,7 @@ function Consent() {
     <RiskShell
       role="citizen"
       title="Consent and data rights"
-      subtitle="Purpose-specific controls aligned with India's DPDP Act: notice, choice, access and erasure. Withdrawal takes effect immediately."
+      subtitle="Purpose-specific controls: risk-scoring consent and erasure are enforced now; model-training preferences are recorded pending a personal-data training pipeline (training currently uses synthetic data only)."
     >
       {error && <ErrorPanel message={error} />}
       {notice && <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700">{notice}</div>}
@@ -118,12 +120,23 @@ function Consent() {
             <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
               <h2 className="font-semibold">Request erasure</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Creates an auditable erasure ticket. Production execution requires institution verification and legal retention checks.
+                Runs the real erasure lifecycle now: every consent purpose is withdrawn, your conversations are
+                deleted, and your account is pseudonymised and disabled. This cannot be undone.
               </p>
               <button onClick={erase} className="mt-4 rounded-xl border border-rose-500/40 px-4 py-2 text-sm text-rose-700">
-                Create erasure request
+                Erase my account data
               </button>
-              {ticket && <p className="mt-3 break-all text-xs text-emerald-600">Received: {ticket}</p>}
+              {ticket && (
+                <div className="mt-3 space-y-1 text-xs">
+                  <p className="break-all text-emerald-600">Ticket {ticket.ticketId}: {ticket.status}</p>
+                  {(ticket.steps || []).map((s) => (
+                    <p key={s.step} className="text-muted-foreground">
+                      {s.status === "done" ? "✓" : "✗"} {s.step.replaceAll("_", " ")} — {s.detail}
+                    </p>
+                  ))}
+                  {ticket.scope_note && <p className="pt-1 text-muted-foreground">{ticket.scope_note}</p>}
+                </div>
+              )}
             </div>
           </div>
         </section>

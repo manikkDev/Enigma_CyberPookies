@@ -161,12 +161,22 @@ The Docker image installs the official CPU-only PyTorch wheel. Do not replace it
 ## Verification
 
 ```bash
-make test                     # 25 Python tests: data, metrics, DP, PSI, model, FL smoke, graph privacy, API
+make test                     # Python tests: data, metrics, DP, PSI, model, FL smoke, graph privacy, API
 cd server && npm test         # live contract tests: auth, role guards, consent, export (needs the stack up)
-cd client && npm run build    # production build of all 20 routes
+cd chatbot-backend && npm test  # copilot policy, tool routing, and prompt-injection tests
+cd client && npm run build    # strict production build of all routes (lint + typecheck enforced)
 docker compose config --quiet
 ```
 
-The inherited frontend currently has legacy full-repository lint findings. Phase-specific TypeScript files have no ESLint errors, and the production Next.js build passes. With Docker Desktop running, `docker compose ps` should show all six services as healthy.
+The frontend is built with `output: 'standalone'`, so `next start` does **not** serve the production build correctly. Run the production server with:
+
+```bash
+cd client
+npm run build
+cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+node .next/standalone/server.js   # serves on port 3000
+```
+
+The build passes strict lint and typecheck; remaining findings are warnings only. With Docker Desktop running, `docker compose ps` should show all six services as healthy.
 
 Non-breaking npm security updates have been applied. Remaining audit findings require breaking upgrades in inherited UI/mail/file-processing dependencies, and `xlsx` has no upstream fix. These are documented rather than hidden with `npm audit fix --force`.

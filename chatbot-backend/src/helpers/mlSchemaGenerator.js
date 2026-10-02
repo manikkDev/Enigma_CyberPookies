@@ -4,7 +4,7 @@ import env from "../config/env.js";
 import { ML_SCHEMA_SYSTEM_PROMPT } from "../prompts/mlSchemaPrompt.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 
 /** Pattern hint: P1–P6 or pattern name; optional, helps Groq pick the right schema */
 const PATTERN_ALIASES = {
@@ -84,7 +84,8 @@ export async function generateMlSchema(userPrompt, options = {}) {
       { role: "user", content: userMessage },
     ],
     temperature: 0.2,
-    max_tokens: 4096,
+    max_tokens: 8192,
+    reasoning_effort: "low",
     response_format: { type: "json_object" },
   };
 

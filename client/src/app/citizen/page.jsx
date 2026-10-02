@@ -101,8 +101,7 @@ function Profile() {
             <div className="rounded-2xl border bg-card p-6">
               <h2 className="text-xl font-semibold">Your privacy controls</h2>
               <p className="mt-3 text-sm text-muted-foreground">
-                Grant or withdraw consent independently for scoring, fraud monitoring, training and cross-institution
-                collaboration (DPDP §6, §11–12).
+                Explicit risk-scoring consent is enforced now. Other purpose choices are recorded for the research prototype and require data-pipeline enforcement before production use.
               </p>
               <div className="mt-5 flex gap-3">
                 <Link href="/citizen/consent" className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white">

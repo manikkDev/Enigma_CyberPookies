@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--no-secagg", dest="secagg", action="store_false")
     parser.add_argument("--fraction-train", type=float, default=1.0)
     parser.add_argument("--client-sample-cap", type=int, default=60000)
-    parser.add_argument("--test-sample-cap", type=int, default=160000)
+    parser.add_argument("--val-sample-cap", type=int, default=50000)
     arguments = parser.parse_args()
     summary = run_federated({
         "run-id": arguments.run_id,
@@ -35,7 +35,7 @@ def main():
         "fraction-train": arguments.fraction_train,
         "server-lr": arguments.server_lr,
         "client-sample-cap": arguments.client_sample_cap,
-        "test-sample-cap": arguments.test_sample_cap,
+        "val-sample-cap": arguments.val_sample_cap,
     })
     print(json.dumps(summary["final"], indent=2))
 

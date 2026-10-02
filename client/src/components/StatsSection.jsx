@@ -1,10 +1,10 @@
 import useCountUp from "@/hooks/useCountUp";
 
 const stats = [
-  { end: 6, suffix: "M+", label: "Federated transactions" },
-  { end: 5, suffix: "", label: "Institutions, zero pooling" },
-  { end: 99, suffix: "%", label: "Federated ROC-AUC" },
-  { end: 100, suffix: "%", label: "Reproducible artifacts" },
+  { end: 6, suffix: "M+", label: "Versioned PaySim research transactions" },
+  { end: 5, suffix: "", label: "Isolated institution partitions (real SecAgg+)" },
+  { end: 66, suffix: "%", label: "Federated PR-AUC on the untouched test split (run flwr_residual_v1)" },
+  { end: 52, suffix: "", label: "Automated checks passing (26 Python · 18 copilot · 8 API)" },
 ];
 
 const StatsSection = () => {

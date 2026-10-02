@@ -12,10 +12,11 @@ from vertical.run_vfl_demo import run as run_vfl
 
 BASE_FL = {
     "dataset": "paysim_banks",
+    "model": "residual_mlp_v1",
     "num-server-rounds": 8,
     "local-epochs": 1,
     "client-sample-cap": 40000,
-    "test-sample-cap": 120000,
+    "val-sample-cap": 50000,
     "secagg-enabled": True,
 }
 
@@ -32,7 +33,7 @@ def seed(force=False, include_graph=True):
     root = Path(settings.RUNS_DIR)
     baseline_path = root / "baselines_paysim_banks.json"
     if force or not baseline_path.exists():
-        run_baselines(train_cap=80000, test_cap=120000)
+        run_baselines(train_cap=80000, test_cap=None)
     for run_id, extra in RUNS:
         if force or not (root / run_id / "summary.json").exists():
             run_federated({**BASE_FL, **extra, "run-id": run_id, "dp-enabled": False})
@@ -42,7 +43,7 @@ def seed(force=False, include_graph=True):
         if force or not (root / run_id / "summary.json").exists():
             summary = run_federated({**BASE_FL, "strategy": "fedprox", "proximal-mu": 0.05,
                                      "run-id": run_id, "num-server-rounds": 6,
-                                     "client-sample-cap": 25000, "test-sample-cap": 80000,
+                                     "client-sample-cap": 25000, "val-sample-cap": 50000,
                                      "dp-enabled": True, "dp-noise-multiplier": noise,
                                      "dp-clipping-norm": 2.0})
         else:

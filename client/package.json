@@ -47,6 +47,7 @@
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^15.6.6",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "remeda": "^2.31.1",
     "shiki": "^1.29.2",

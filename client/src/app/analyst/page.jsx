@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import ProtectedRoute from "@/components/auth/protected-route";
 import RiskShell, { ErrorPanel, LoadingPanel, MetricCard } from "@/components/risk/RiskShell";
+import { Term } from "@/components/risk/Term";
 import { api } from "@/lib/api";
 
 const percent = (value) => (value == null ? "—" : `${(value * 100).toFixed(2)}%`);
@@ -11,16 +12,16 @@ const percent = (value) => (value == null ? "—" : `${(value * 100).toFixed(2)}
 function ComparisonBars({ baselines, latest }) {
   if (!baselines) return null;
   const entries = [
-    { label: "Isolated banks (MLP, same class)", value: baselines.isolated_mlp_mean?.pr_auc, color: "#f59e0b", note: "each bank alone" },
+    { label: "Isolated banks (residual MLP, same class)", value: baselines.isolated_mlp_mean?.pr_auc, color: "#f59e0b", note: "each bank alone" },
     { label: "Federated — this deployment", value: latest?.final?.pr_auc, color: "#6366f1", note: latest?.config?.strategy || "fedprox" },
-    { label: "Centralized MLP (pooled, same class)", value: baselines.centralized_mlp?.pr_auc, color: "#10b981", note: "reference only" },
+    { label: "Centralized residual MLP (pooled, same class)", value: baselines.centralized_mlp?.pr_auc, color: "#10b981", note: "reference only" },
     { label: "Centralized XGBoost ceiling", value: baselines.centralized?.pr_auc, color: "#0ea5e9", note: "not deployable" },
   ];
   return (
     <div className="rounded-2xl border bg-card p-6">
       <h2 className="text-xl font-semibold">Isolated vs federated vs pooled — PR-AUC</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Same-model-class comparison proves the federation gain; the XGBoost line is a theoretical ceiling on illegally pooled data.
+        Same-model-class comparison measures the seeded benchmark gain; the XGBoost line is a non-deployable pooled research reference.
       </p>
       <div className="mt-6 space-y-4">
         {entries.map((entry) => (
@@ -77,13 +78,24 @@ function Dashboard() {
   return (
     <RiskShell
       title="Bank risk command center"
-      subtitle="Compare siloed, centralized and federated performance while customer rows remain inside each institution."
+      subtitle="Compare isolated, pooled and federated research artifacts with explicit model, sampling and privacy limitations."
     >
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Latest FL PR-AUC" value={percent(latest?.final?.pr_auc)} detail={latest?.run_id || "No run"} />
+        <MetricCard label={<Term id="pr-auc">Latest FL PR-AUC</Term>} value={percent(latest?.final?.pr_auc)} detail={latest?.run_id || "No run"} />
         <MetricCard label="Centralized MLP (pooled)" value={percent(baseline?.centralized_mlp?.pr_auc)} detail="Same-class pooled reference" tone="emerald" />
         <MetricCard label="Isolated-bank MLP mean" value={percent(baseline?.isolated_mlp_mean?.pr_auc)} detail="Each bank training alone" tone="amber" />
-        <MetricCard label="Privacy posture" value={privacy.dp_enabled ? `ε ${privacy.epsilon?.toFixed(1) ?? "—"}` : "SecAgg only"} detail={privacy.secagg ? "pairwise-mask simulation" : "plain averaging"} tone="rose" />
+        <MetricCard
+          label={<Term id="dp-epsilon">Privacy posture</Term>}
+          value={privacy.dp_enabled ? `ε ${privacy.epsilon?.toFixed(1) ?? "—"}` : "DP off"}
+          detail={
+            privacy.secagg_mode === "flower_secaggplus"
+              ? "real SecAgg+ (Flower)"
+              : privacy.secagg
+                ? "pairwise-mask simulation — not production SecAgg"
+                : "plain averaging"
+          }
+          tone="rose"
+        />
       </section>
 
       <ComparisonBars baselines={baseline} latest={latest} />
@@ -154,15 +166,15 @@ function Dashboard() {
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt>Aggregation</dt>
-              <dd>{privacy?.secagg ? "Pairwise masks (simulated)" : "Weighted average"}</dd>
+              <dt><Term id="secagg">Aggregation</Term></dt>
+              <dd>{privacy?.secagg_mode === "flower_secaggplus" ? "SecAgg+ (real)" : privacy?.secagg ? "Pairwise masks (simulated)" : "Weighted average"}</dd>
             </div>
             <div className="flex justify-between">
-              <dt>DP ε</dt>
+              <dt><Term id="dp-epsilon">DP ε</Term></dt>
               <dd>{latest?.epsilon ? `ε ${latest.epsilon.toFixed(2)} (δ=1e-5)` : "Non-private run"}</dd>
             </div>
             <div className="flex justify-between">
-              <dt>Calibration</dt>
+              <dt><Term id="ece">Calibration</Term></dt>
               <dd>{latest?.calibration ? `ECE ${latest.calibration.ece_after?.toFixed(3)} (T=${latest.calibration.temperature?.toFixed(2)})` : "—"}</dd>
             </div>
           </dl>

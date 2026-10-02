@@ -56,12 +56,12 @@ const ProblemSection = () => {
           }}
         >
           <div className="float-card animate-idle-float p-6 w-full max-w-sm" style={{ transform: "rotate(-2deg)" }}>
-            <span className="pill-badge mb-4">⚠ FRAUD RING DETECTED</span>
+            <span className="pill-badge mb-4">ILLUSTRATIVE SYNTHETIC SCENARIO</span>
             <h3 className="mt-4 text-xl font-serif text-foreground">
               Mule Network 3f8a…c91d
             </h3>
             <p className="text-xs font-mono text-muted-foreground mt-1">
-              Spanning 3 institutions · invisible to each alone
+              Designed to demonstrate a future multi-institution signal
             </p>
             <p className="mt-4 text-4xl font-mono text-destructive font-semibold">
               94 <span className="text-lg text-muted-foreground font-normal">/ 100</span>

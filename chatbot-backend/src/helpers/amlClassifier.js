@@ -4,7 +4,7 @@ import env from "../config/env.js";
 import { CLASSIFIER_SYSTEM_PROMPT } from "../prompts/classifierPrompt.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 const CLASSIFIER_MODE = (env.CLASSIFIER_MODE || "local").toLowerCase();
 const THRESHOLD = 0.75;
 const PATTERN_DEFS = [
@@ -189,7 +189,8 @@ export async function classifyAmlSample(sample) {
       { role: "user", content: userMessage },
     ],
     temperature: 0.1,
-    max_tokens: 2048,
+    max_tokens: 4096,
+    reasoning_effort: "low",
     response_format: { type: "json_object" },
   };
 

@@ -4,16 +4,16 @@
 const nextConfig = {
   outputFileTracingRoot: __dirname,
   eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
-    ignoreDuringBuilds: true,
+    // Production builds must fail when application lint checks fail.
+    // Lint findings are release-blocking rather than silently ignored.
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
-    ignoreBuildErrors: true,
+    // !! REQUIRED !!
+    // Production builds must fail when TypeScript validation fails.
+    // Type errors cannot be bypassed in release builds.
+    // !! REQUIRED !!
+    ignoreBuildErrors: false,
   },
   async rewrites() {
     return [

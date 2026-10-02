@@ -2,11 +2,60 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-// import { transcribeAudio } from '../config/openai.js';
+import { fileTypeFromBuffer } from 'file-type';
+import env from '../config/env.js';
 import { deleteFile } from '../utils/fileUpload.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const GROQ_WHISPER_MODEL = env.GROQ_WHISPER_MODEL || 'whisper-large-v3-turbo';
+
+/**
+ * Transcribes an audio file using Groq's Whisper endpoint (OpenAI-compatible).
+ * @param {string} audioPath - Path to the uploaded audio file
+ * @returns {Promise<{success: boolean, text?: string, error?: string}>}
+ */
+async function transcribeAudio(audioPath) {
+  if (!env.GROQ_KEY) {
+    return { success: false, error: 'GROQ_KEY is not configured' };
+  }
+
+  const buffer = await fs.promises.readFile(audioPath);
+
+  // Sniff the real format — browsers often upload webm/opus data with a .wav name
+  const sniffed = await fileTypeFromBuffer(buffer).catch(() => null);
+  const ext = sniffed?.ext || path.extname(audioPath).replace('.', '') || 'wav';
+  const mimeType = sniffed?.mime || 'application/octet-stream';
+  const filename = `audio.${ext}`;
+
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: mimeType }), filename);
+  form.append('model', GROQ_WHISPER_MODEL);
+  form.append('response_format', 'json');
+
+  const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.GROQ_KEY}` },
+    body: form,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    return {
+      success: false,
+      error: `Groq transcription error ${response.status}${text ? `: ${text}` : ''}`,
+    };
+  }
+
+  const data = await response.json();
+  const text = typeof data?.text === 'string' ? data.text : '';
+  if (!text) {
+    return { success: false, error: 'No transcription text in response' };
+  }
+  return { success: true, text };
+}
 
 /**
  * Handles speech-to-text conversion
@@ -41,15 +90,8 @@ export const convertSpeechToText = async (req, res) => {
       throw new Error('Uploaded audio file is empty');
     }
 
-    // Create read stream and handle any errors
-    const audioStream = fs.createReadStream(audioPath);
-    audioStream.on('error', (err) => {
-      console.error('Error reading audio file:', err);
-      throw new Error(`Error reading audio file: ${err.message}`);
-    });
-
-    // Transcribe the audio using OpenAI Whisper API
-    const result = await transcribeAudio(audioStream);
+    // Transcribe the audio using Groq's Whisper API
+    const result = await transcribeAudio(audioPath);
 
     if (!result.success) {
       console.error('Transcription failed:', result.error);

@@ -79,7 +79,6 @@ def test_ingest_writes_only_pseudonymous_rows(monkeypatch):
             "counterparty_id": ["ef56" * 8, "7890" * 8],
             "institution_id": [0, 1],
             "amount": [100.0, 20.0],
-            "isFraud": [1, 0],
             "nameOrig": ["C999000111", "C000222333"],
             "nameDest": ["M777555333", "M111444555"],
         }
@@ -97,6 +96,7 @@ def test_ingest_writes_only_pseudonymous_rows(monkeypatch):
 
     result = ingest_module.ingest(run_id="t", max_rows=10)
     assert result["raw_identifiers_written"] is False
+    assert result["selection"] == "uniform_without_target_labels"
 
     # Flatten every row payload sent to Neo4j and confirm no raw identifier appears.
     serialized = repr(session.rows)
@@ -105,6 +105,6 @@ def test_ingest_writes_only_pseudonymous_rows(monkeypatch):
     # And the property payloads only carry derived fields.
     allowed = {"pid", "institution_id", "score", "band", "source", "target", "n_tx",
                "total_amt", "max_amt", "avg_risk", "frac_flagged", "cluster",
-               "id", "label", "size", "avg_score", "n_high"}
+               "id", "label", "size", "avg_score", "n_high", "pagerank"}
     for row in session.rows:
         assert set(row.keys()) <= allowed

@@ -51,13 +51,16 @@ const DemoPreviewSection = () => {
         <div className="text-center mb-12">
           <span className="pill-badge">DEMO PREVIEW</span>
           <h2 className="mt-6 text-3xl md:text-[44px] leading-[1.15] font-serif text-foreground">
-            See a fraud ring surface
+            Explore an illustrative risk ring
             <br />
-            <span className="font-bold">without sharing a row.</span>
+            <span className="font-bold">with derived, pseudonymous evidence.</span>
           </h2>
         </div>
 
         {/* Mock dashboard */}
+        <p className="mx-auto mb-3 max-w-[960px] text-center text-xs text-muted-foreground">
+          Illustrative synthetic UI scenario — not a live finding or a claim about real institutions.
+        </p>
         <div
           className="mx-auto max-w-[960px] rounded-2xl border border-border overflow-hidden"
           style={{
@@ -74,10 +77,10 @@ const DemoPreviewSection = () => {
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary" />
               <span className="text-xs font-serif text-foreground">Arth Saathi</span>
             </div>
-            <span className="pill-badge-amber !text-[10px]">⚠ mule network spanning 3 banks</span>
+            <span className="pill-badge-amber !text-[10px]">Illustrative synthetic ring</span>
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-[11px] font-mono text-primary">Live</span>
+              <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/60" />
+              <span className="text-[11px] font-mono text-muted-foreground">Preview</span>
             </div>
           </div>
 
@@ -173,7 +176,7 @@ const DemoPreviewSection = () => {
                 </svg>
               </div>
               <p className="text-xs font-mono text-muted-foreground text-center mt-2">
-                Mule loop detected: <span className="text-destructive">High risk</span> · funds cycle across 3 banks
+                Synthetic scenario: <span className="text-destructive">elevated derived risk</span> · requires analyst review
               </p>
             </div>
 
@@ -197,7 +200,7 @@ const DemoPreviewSection = () => {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <span className="pill-badge-red !text-[9px] !px-2 !py-0.5">Mule ring — layering</span>
-                  <span className="pill-badge-amber !text-[9px] !px-2 !py-0.5">Cross-bank edges</span>
+                  <span className="pill-badge-amber !text-[9px] !px-2 !py-0.5">Synthetic multi-party scenario</span>
                 </div>
                 <button
                   className="w-full mt-2 rounded-lg border border-primary text-primary text-xs font-mono py-2 hover:bg-primary/10 transition"

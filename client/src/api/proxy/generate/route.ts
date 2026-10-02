@@ -62,11 +62,10 @@ export async function POST(request: Request) {
       }
     } else if (typeof responseData === "object" && responseData !== null) {
       // Handle direct response
+      const direct = responseData as { content?: unknown; sources?: unknown };
       result = {
-        content: (responseData as any).content || "",
-        sources: Array.isArray((responseData as any).sources)
-          ? (responseData as any).sources
-          : [],
+        content: typeof direct.content === "string" ? direct.content : "",
+        sources: Array.isArray(direct.sources) ? direct.sources : [],
       };
     }
 

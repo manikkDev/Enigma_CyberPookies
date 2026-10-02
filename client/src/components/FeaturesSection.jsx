@@ -3,10 +3,10 @@ import { useRef } from "react";
 import { Shield, Search, MessageCircle, AlertTriangle, Network, FileText, GitBranch, Lock, Scale } from "lucide-react";
 
 const features = [
-  { icon: GitBranch, title: "Horizontal Federated Learning", description: "Five institutions train one shared model on their own customers. FedAvg/FedProx strategies with live per-round convergence — raw rows never move." },
-  { icon: Lock, title: "Secure Aggregation + Differential Privacy", description: "The server only sees masked aggregate updates, never individual ones. Central-DP noise with a measured privacy budget (ε, δ) reported per run." },
-  { icon: Search, title: "Vertical FL with PSI", description: "Bank, insurer and lender hold different features of the same customer. Private set intersection aligns shared IDs without revealing non-shared ones." },
-  { icon: Network, title: "Pseudonymised Risk Graph", description: "Neo4j stores only derived intelligence — pseudonymous account nodes and risk edges — exposing mule networks no single bank could see." },
+  { icon: GitBranch, title: "Horizontal FL Research Runner", description: "Five research partitions benchmark FedAvg and FedProx with live per-round convergence. Process-isolated institution clients are the current implementation gate." },
+  { icon: Lock, title: "Measured Privacy Controls", description: "Institution-update clipping and central-DP accounting report a measured privacy budget (ε, δ). The current pairwise-mask SecAgg path is transparently labelled as a simulation." },
+  { icon: Search, title: "Vertical Collaboration Benchmark", description: "An educational PSI alignment and feature-union benchmark measures the potential gain from bank, insurer and lender feature slices; distributed split learning is the next implementation gate." },
+  { icon: Network, title: "Pseudonymised Risk Graph", description: "Neo4j stores derived research intelligence — pseudonymous account nodes, scored relationships and versioned community evidence — without raw source identifiers." },
   { icon: AlertTriangle, title: "Explainable Risk Scores", description: "Analysts get per-customer scores with signed feature contributions; citizens get plain-language explanations, not black-box verdicts." },
   { icon: Scale, title: "Consent & DPDP Rights", description: "Purpose-level consent for scoring, monitoring and training. Erasure requests and full audit trails are first-class API citizens." },
 ];

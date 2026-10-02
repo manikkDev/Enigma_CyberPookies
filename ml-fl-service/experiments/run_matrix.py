@@ -14,8 +14,8 @@ GRID = [
     {"run-id": "mx_fedprox_dp_strong", "strategy": "fedprox", "proximal-mu": 0.05,
      "dp-enabled": True, "dp-noise-multiplier": 2.0, "dp-clipping-norm": 2.0},
 ]
-BASE = {"dataset": "paysim_banks", "num-server-rounds": 8, "local-epochs": 1,
-        "client-sample-cap": 40000, "test-sample-cap": 120000, "secagg-enabled": True}
+BASE = {"dataset": "paysim_banks", "model": "residual_mlp_v1", "num-server-rounds": 8, "local-epochs": 1,
+        "client-sample-cap": 40000, "val-sample-cap": 50000, "secagg-enabled": True}
 
 
 def main():

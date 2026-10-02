@@ -3,6 +3,7 @@
 import React from "react"
 import Markdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import remarkBreaks from "remark-breaks"
 import { Download, Maximize2, RefreshCcw, ZoomIn, ZoomOut } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -25,7 +26,7 @@ function isMermaidErrorSvg(svg: string) {
 
 const MermaidDiagram = ({ code }: { code: string }) => {
   const canvasRef = React.useRef<HTMLDivElement | null>(null)
-  const panzoomRef = React.useRef<any>(null)
+  const panzoomRef = React.useRef<import("panzoom").PanZoom | null>(null)
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading")
   const [svgMarkup, setSvgMarkup] = React.useState<string | null>(null)
   const [isExpanded, setIsExpanded] = React.useState(false)
@@ -137,16 +138,18 @@ const MermaidDiagram = ({ code }: { code: string }) => {
   }
 
   const handleZoom = (delta: number) => {
-    if (!panzoomRef.current) return
-    const currentScale = panzoomRef.current.getTransform().scale
+    const pz = panzoomRef.current
+    if (!pz) return
+    const currentScale = pz.getTransform().scale
     const nextScale = Math.min(4, Math.max(0.4, currentScale + delta))
-    withCanvasCenter(({ x, y }) => panzoomRef.current.zoomAbs(x, y, nextScale))
+    withCanvasCenter(({ x, y }) => pz.zoomAbs(x, y, nextScale))
   }
 
   const handleReset = () => {
-    if (!panzoomRef.current) return
-    panzoomRef.current.moveTo(0, 0)
-    withCanvasCenter(({ x, y }) => panzoomRef.current.zoomAbs(x, y, 1))
+    const pz = panzoomRef.current
+    if (!pz) return
+    pz.moveTo(0, 0)
+    withCanvasCenter(({ x, y }) => pz.zoomAbs(x, y, 1))
   }
 
   const handleDownload = async (format: "svg" | "png") => {
@@ -325,11 +328,26 @@ interface MarkdownRendererProps {
   children: string
 }
 
+// The model occasionally hallucinates pseudo tool-call markup
+// (e.g. <tool_code>print(default_api...)</tool_code>). Strip these blocks —
+// they are internal protocol, never user-facing text. Also strips a trailing
+// unclosed tag while a response is still streaming.
+function stripToolArtifacts(text: string): string {
+  return text
+    .replace(/<tool_(code|call|response|result|output)>[\s\S]*?<\/tool_\1>/gi, "")
+    .replace(/<tool_(code|call|response|result|output)>[\s\S]*$/gi, "")
+    .replace(/<\/tool_(code|call|response|result|output)>/gi, "")
+    .replace(/<function_(call|response|result)>[\s\S]*?<\/function_\1>/gi, "")
+    .replace(/<function_(call|response|result)>[\s\S]*$/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   return (
     <div className="space-y-3">
-      <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS as unknown as Components}>
-        {children}
+      <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={COMPONENTS as unknown as Components}>
+        {stripToolArtifacts(children)}
       </Markdown>
     </div>
   )

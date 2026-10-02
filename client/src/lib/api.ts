@@ -31,18 +31,38 @@ export const api = {
     summary: () => fetch(`${ENDPOINTS.fl}/summary`, { headers: authHeaders() }).then(json),
     predict: (body: unknown) => fetch(`${ENDPOINTS.fl}/predict`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(body) }).then(json),
     customers: (query: Record<string, string>) => fetch(`${ENDPOINTS.fl}/customers?${new URLSearchParams(query)}`, { headers: authHeaders() }).then(json),
+    customer: (id: string, query: Record<string, string>) => fetch(`${ENDPOINTS.fl}/customers/${encodeURIComponent(id)}?${new URLSearchParams(query)}`, { headers: authHeaders() }).then(json),
     citizen: (runId?: string) => fetch(`${ENDPOINTS.fl}/citizen${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
     fairness: (runId?: string) => fetch(`${ENDPOINTS.fl}/fairness${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { headers: authHeaders() }).then(json),
     epsilon: (noise: number, rounds: number, targetEpsilon?: number) =>
       fetch(`${ENDPOINTS.fl}/epsilon?noise=${noise}&rounds=${rounds}${targetEpsilon ? `&target_epsilon=${targetEpsilon}` : ""}`, { headers: authHeaders() }).then(json),
     seedGraph: (runId?: string) => fetch(`${ENDPOINTS.fl}/graph/seed`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ run_id: runId }) }).then(json),
     stream: (id: string, onEvent: (event: RoundEvent) => void) => {
-      const stream = new EventSource(ENDPOINTS.flStream(id));
-      stream.addEventListener("progress", (message) => onEvent(JSON.parse((message as MessageEvent).data)));
-      return () => stream.close();
+      const controller = new AbortController();
+      fetch(ENDPOINTS.flStream(id), { headers: authHeaders(), signal: controller.signal }).then(async (response) => {
+        if (!response.ok || !response.body) throw new Error(`Training stream failed with ${response.status}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!controller.signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split(/\r?\n\r?\n/);
+          buffer = blocks.pop() || "";
+          for (const block of blocks) {
+            const line = block.split(/\r?\n/).find((entry) => entry.startsWith("data:"));
+            if (line) onEvent(JSON.parse(line.slice(5).trim()));
+          }
+        }
+      }).catch((error) => {
+        if (!controller.signal.aborted) console.error(error);
+      });
+      return () => controller.abort();
     },
   },
   graph: {
+    meta: () => fetch(ENDPOINTS.riskGraphMeta, { headers: authHeaders() }).then(json),
     overview: (minScore = 0.3, limit = 400) => fetch(`${ENDPOINTS.riskGraphOverview}?minScore=${minScore}&limit=${limit}`, { headers: authHeaders() }).then(json),
     campaigns: () => fetch(ENDPOINTS.riskGraphCampaigns, { headers: authHeaders() }).then(json),
     campaign: (id: number) => fetch(ENDPOINTS.riskGraphCampaign(id), { headers: authHeaders() }).then(json),

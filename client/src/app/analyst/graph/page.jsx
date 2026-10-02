@@ -35,16 +35,22 @@ function layoutNodes(nodes) {
 function GraphView() {
   const [graph, setGraph] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
+  const [meta, setMeta] = useState(null);
   const [selected, setSelected] = useState(null); // campaign detail
   const [neighbors, setNeighbors] = useState(null); // {center, neighbors[]}
   const [focusNode, setFocusNode] = useState(null);
   const [error, setError] = useState("");
 
   const load = () =>
-    Promise.all([api.graph.overview(0.3, 400), api.graph.campaigns()])
-      .then(([network, rings]) => {
+    Promise.all([
+      api.graph.overview(0.3, 400),
+      api.graph.campaigns(),
+      api.graph.meta().catch(() => null),
+    ])
+      .then(([network, rings, snapshot]) => {
         setGraph(network);
         setCampaigns(rings);
+        setMeta(snapshot);
       })
       .catch((reason) => setError(reason.message));
   useEffect(() => {
@@ -62,7 +68,7 @@ function GraphView() {
   const seed = async () => {
     setError("");
     try {
-      await api.fl.seedGraph("demo_fedprox");
+      await api.fl.seedGraph(meta?.run_id);
       await load();
     } catch (reason) {
       setError(reason.message);
@@ -90,7 +96,7 @@ function GraphView() {
 
   return (
     <RiskShell
-      title="Cross-institution risk graph"
+      title="Derived research risk graph"
       subtitle="Only pseudonymous accounts, model scores and aggregated transfer statistics enter Neo4j. Raw identifiers and balances are excluded."
     >
       {error && <ErrorPanel message={error} />}
@@ -108,11 +114,23 @@ function GraphView() {
         <LoadingPanel />
       ) : (
         <>
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 md:grid-cols-4">
             <MetricCard label="Visible accounts" value={visible.nodes.length} />
             <MetricCard label="Derived transfer edges" value={visible.edges.length} tone="emerald" />
             <MetricCard label="Detected campaigns" value={campaigns.length} tone="rose" />
+            <MetricCard
+              label="Graph snapshot"
+              value={meta ? meta.snapshot_id.split(":")[0].slice(0, 12) : "—"}
+              tone="slate"
+            />
           </section>
+          {meta && (
+            <p className="text-xs text-muted-foreground">
+              Snapshot <code className="font-mono">{meta.snapshot_id}</code> · scored by run{" "}
+              <code className="font-mono">{meta.run_id}</code> · {meta.accounts} accounts ·{" "}
+              {meta.edges} edges · source: {meta.source_split}. Institution-scoped view.
+            </p>
+          )}
           <section className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
             <div className="relative min-h-[560px] overflow-hidden rounded-2xl border bg-slate-950 p-4">
               <svg viewBox="0 0 800 560" className="h-full min-h-[540px] w-full">

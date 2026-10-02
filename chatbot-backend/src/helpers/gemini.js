@@ -47,7 +47,7 @@ const CONFIG = {
 const EXCALIDRAW_FUNCTION_DECLARATION = {
   name: "generate_excalidraw_flowchart",
   description:
-    "Generate an interactive diagram using Excalidraw. Use this function when the user asks for ANY type of diagram, chart, flowchart, visual representation, or graphical illustration including: flowcharts, process diagrams, workflow diagrams, use case diagrams, sequence diagrams, system architecture diagrams, data flow diagrams, mind maps, organizational charts, network diagrams, or any visual representation of concepts, processes, or relationships. This function returns Excalidraw-compatible JSON that renders as an interactive, editable diagram.",
+    "Generate an interactive diagram using Excalidraw. Use this function when the user asks for ANY type of diagram, chart, flowchart, visual representation, or graphical illustration including: flowcharts, process diagrams, workflow diagrams, use case diagrams, sequence diagrams, system architecture diagrams, data flow diagrams, mind maps, organizational charts, network diagrams, or any visual representation of concepts, processes, or relationships. This function returns Excalidraw-compatible JSON that renders as an interactive, editable diagram. IMPORTANT: call this function IMMEDIATELY when a diagram is requested — never ask the user to choose a style or complexity first; pick sensible defaults (style 'modern', complexity 'detailed') unless the user specified otherwise.",
   parameters: {
     type: "object",
     properties: {
@@ -598,6 +598,19 @@ export function buildRequestBody(
     console.log(
       `[buildRequestBody] Enabling function_declarations (Excalidraw)`,
     );
+
+    // Nudge the model to actually call the tool instead of asking the user
+    // to pick a style/complexity — a common flash-lite failure mode.
+    const toolHint =
+      "\n\nIf the user requests a diagram, flowchart, chart, or visual workflow, call the generate_excalidraw_flowchart function immediately with sensible defaults (style 'modern', complexity 'detailed'). Do not ask clarifying questions about diagram options — generate it directly.";
+    if (body.systemInstruction?.parts?.[0]) {
+      body.systemInstruction.parts[0].text += toolHint;
+    } else {
+      body.systemInstruction = {
+        role: "system",
+        parts: [{ text: toolHint.trim() }],
+      };
+    }
   }
 
   console.log(

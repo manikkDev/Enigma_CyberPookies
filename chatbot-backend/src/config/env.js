@@ -22,7 +22,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Verify required environment variables
-const requiredEnvVars = ['GEMINI_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'GROQ_KEY'];
+const requiredEnvVars = ['JWT_SECRET', 'NODE_INTERNAL_TOKEN'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]?.trim());
 
 if (missingVars.length > 0) {

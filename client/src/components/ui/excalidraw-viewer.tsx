@@ -23,17 +23,26 @@ const Excalidraw = dynamic(
     }
 )
 
+export interface ExcalidrawElementLike {
+    id?: string
+    [key: string]: unknown
+}
+
 export interface ExcalidrawData {
     type: 'excalidraw'
     version: number
     source: string
-    elements: any[]
+    elements: ExcalidrawElementLike[]
     appState: {
         gridSize: number | null
         viewBackgroundColor: string
     }
-    files: Record<string, any>
+    files: Record<string, unknown>
 }
+
+// The exact imperative API the Excalidraw component hands to its callback —
+// derived from the component props so it tracks the installed package version.
+type ExcalidrawAPI = Parameters<NonNullable<React.ComponentProps<typeof Excalidraw>["excalidrawAPI"]>>[0];
 
 interface ExcalidrawViewerProps {
     data: ExcalidrawData
@@ -41,24 +50,16 @@ interface ExcalidrawViewerProps {
 }
 
 export function ExcalidrawViewer({ data, className = '' }: ExcalidrawViewerProps) {
-    // Safety guard
-    if (!data) {
-        console.warn('⚠️ ExcalidrawViewer: No data provided')
-        return null
-    }
-
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
-    const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null)
-    const excalidrawAPIRef = useRef<any>(null)
-    const [key, setKey] = useState(0)
+    const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawAPI | null>(null)
+    const excalidrawAPIRef = useRef<ExcalidrawAPI | null>(null)
 
     // Memoize sanitized elements to prevent re-calculations
-    const sanitizedElements = useMemo(() => sanitizeExcalidrawElements(data.elements), [data.elements])
+    const sanitizedElements = useMemo(() => sanitizeExcalidrawElements(data?.elements || []), [data?.elements])
 
     // Capture API and ref
-    const onExcalidrawAPIChange = useCallback((api: any) => {
-        console.log('🔄 ExcalidrawViewer: API Ready', !!api)
+    const onExcalidrawAPIChange = useCallback((api: ExcalidrawAPI) => {
         setExcalidrawAPI(api)
         excalidrawAPIRef.current = api
     }, [])
@@ -80,11 +81,12 @@ export function ExcalidrawViewer({ data, className = '' }: ExcalidrawViewerProps
 
             // Double check zoom state after small delay to fix NaN if it occurred
             setTimeout(() => {
-                const state = excalidrawAPIRef.current.getAppState();
+                const api = excalidrawAPIRef.current
+                if (!api) return
+                const state = api.getAppState();
                 if (!Number.isFinite(state.zoom.value) || state.zoom.value <= 0) {
-                    console.warn('⚠️ ExcalidrawViewer: NaN zoom detected after auto-scroll, fixing...')
-                    excalidrawAPIRef.current.updateScene({
-                        appState: { zoom: { value: 1 as any }, scrollX: 0, scrollY: 0 }
+                    api.updateScene({
+                        appState: { scrollX: 0, scrollY: 0 }
                     })
                 }
             }, 100)
@@ -105,6 +107,11 @@ export function ExcalidrawViewer({ data, className = '' }: ExcalidrawViewerProps
 
         return () => clearTimeout(timer)
     }, [excalidrawAPI, safeScrollToContent])
+
+    // Safety guard — hooks above must run unconditionally.
+    if (!data) {
+        return null
+    }
 
     const handleDownload = async () => {
         if (!excalidrawAPI) return
@@ -189,11 +196,12 @@ export function ExcalidrawViewer({ data, className = '' }: ExcalidrawViewerProps
                     key={contentKey}
                     excalidrawAPI={onExcalidrawAPIChange}
                     initialData={{
-                        elements: sanitizedElements || [],
+                        // Sanitized loose elements — the sanitizer guarantees the
+                        // runtime shape; Excalidraw's element union is stricter.
+                        elements: (sanitizedElements || []) as never,
                         appState: {
                             viewBackgroundColor: data.appState?.viewBackgroundColor || '#ffffff',
                             gridSize: data.appState?.gridSize || undefined,
-                            zoom: { value: 1 as any },
                             scrollX: 0,
                             scrollY: 0
                         },

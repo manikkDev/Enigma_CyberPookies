@@ -33,7 +33,12 @@ export interface ExcalidrawElement {
     textAlign?: string;
     verticalAlign?: string;
     baseline?: number;
+    frameId?: string | null;
+    startBinding?: { elementId: string } | null;
+    endBinding?: { elementId: string } | null;
 }
+
+type LooseElement = Partial<ExcalidrawElement> & Record<string, unknown>;
 
 /**
  * Sanitizes Excalidraw elements to prevent rendering errors (Zoom NaN).
@@ -45,14 +50,14 @@ export interface ExcalidrawElement {
  * 4. Text must have valid containerId if present (remove invalid containerId)
  * 5. Remove elements that are fundamentally broken
  */
-export function sanitizeExcalidrawElements(elements: any[]): any[] {
+export function sanitizeExcalidrawElements(elements: LooseElement[]): LooseElement[] {
     if (!Array.isArray(elements)) {
         console.error('sanitizeExcalidrawElements: Elements is not an array', elements);
         return [];
     }
 
-    const validIds = new Set(elements.map(el => el?.id).filter(Boolean));
-    const sanitized: ExcalidrawElement[] = [];
+    const validIds = new Set(elements.map(el => el?.id).filter(Boolean) as string[]);
+    const sanitized: LooseElement[] = [];
 
     for (const el of elements) {
         // 1. Basic Object Validation
@@ -72,7 +77,7 @@ export function sanitizeExcalidrawElements(elements: any[]): any[] {
 
         // 3. Coordinate Validation & Fixing
         // Ensure numbers are finite. if NaN -> 0, if Infinity -> 0
-        const ensureFinite = (val: any, defaultVal = 0) => {
+        const ensureFinite = (val: unknown, defaultVal = 0) => {
             const n = Number(val);
             return Number.isFinite(n) ? n : defaultVal;
         };
@@ -85,11 +90,11 @@ export function sanitizeExcalidrawElements(elements: any[]): any[] {
         newEl.height = ensureFinite(newEl.height);
 
         if (newEl.type !== 'arrow' && newEl.type !== 'line') {
-            if (newEl.width <= 0) {
+            if (Number(newEl.width) <= 0) {
                 console.warn(`Fixing element ${newEl.id} width <= 0 (was ${newEl.width}), setting to 10`);
                 newEl.width = 10;
             }
-            if (newEl.height <= 0) {
+            if (Number(newEl.height) <= 0) {
                 console.warn(`Fixing element ${newEl.id} height <= 0 (was ${newEl.height}), setting to 10`);
                 newEl.height = 10;
             }
@@ -103,7 +108,7 @@ export function sanitizeExcalidrawElements(elements: any[]): any[] {
                 newEl.points = [[0, 0], [newEl.width || 100, newEl.height || 100]];
             } else {
                 // Ensure all points are valid numbers
-                newEl.points = newEl.points.map((pt: any) => {
+                newEl.points = newEl.points.map((pt: unknown) => {
                     if (!Array.isArray(pt) || pt.length < 2) return [0, 0];
                     return [ensureFinite(pt[0]), ensureFinite(pt[1])];
                 });
@@ -140,7 +145,7 @@ export function sanitizeExcalidrawElements(elements: any[]): any[] {
 
         // 10. Fix bound elements (critical for arrows)
         if (Array.isArray(newEl.boundElements)) {
-            newEl.boundElements = newEl.boundElements.filter((b: any) => b && b.id && validIds.has(b.id));
+            newEl.boundElements = newEl.boundElements.filter((b) => b && b.id && validIds.has(b.id));
         }
 
         // 11. Fix bindings

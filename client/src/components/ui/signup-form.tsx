@@ -48,10 +48,11 @@ export function SignupForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"citizen" | "analyst">("citizen");
-  const [institutionId, setInstitutionId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [hasInvite, setHasInvite] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [institutionId, setInstitutionId] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -86,11 +87,6 @@ export function SignupForm({
       return;
     }
 
-    if (role === "analyst" && institutionId === null) {
-      toast.error("Please select your institution");
-      return;
-    }
-
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
       return;
@@ -109,13 +105,23 @@ export function SignupForm({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: username.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          role,
-          institutionId: role === "analyst" ? institutionId : null,
-        }),
+        body: JSON.stringify(
+          hasInvite
+            ? {
+                name: username.trim(),
+                email: email.trim().toLowerCase(),
+                password,
+                role: "analyst",
+                inviteCode: inviteCode.trim(),
+                institutionId: Number(institutionId),
+              }
+            : {
+                name: username.trim(),
+                email: email.trim().toLowerCase(),
+                password,
+                role: "citizen",
+              },
+        ),
       });
 
       const data = await response.json();
@@ -174,7 +180,20 @@ export function SignupForm({
     try {
       setIsGoogleLoading(true);
 
-      const { google } = window as typeof window & { google?: any };
+      const { google } = window as typeof window & {
+        google?: {
+          accounts?: {
+            oauth2?: {
+              initCodeClient?: (config: {
+                client_id: string;
+                scope: string;
+                ux_mode: string;
+                callback: (response: { code?: string; error?: string }) => void;
+              }) => { requestCode: () => void };
+            };
+          };
+        };
+      };
       if (!google || !google.accounts || !google.accounts.oauth2) {
         toast.error("Google SDK not loaded", {
           description: "Please check your network connection and try again.",
@@ -193,7 +212,7 @@ export function SignupForm({
         return;
       }
 
-      const client = google.accounts.oauth2.initCodeClient({
+      const client = google.accounts.oauth2.initCodeClient!({
         client_id: googleClientId,
         scope: "openid email profile",
         ux_mode: "popup",
@@ -209,7 +228,7 @@ export function SignupForm({
             return;
           }
 
-          const result = await loginWithGoogle(response.code, { role, institutionId });
+          const result = await loginWithGoogle(response.code, { role: "citizen" });
           if (!result.success) {
             setIsGoogleLoading(false);
           }
@@ -249,29 +268,48 @@ export function SignupForm({
           </Field>
           <Field>
             <FieldLabel>Account type</FieldLabel>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Account type">
-              <Button type="button" variant={role === "citizen" ? "default" : "outline"} aria-pressed={role === "citizen"} onClick={() => { setRole("citizen"); setInstitutionId(null); }}>
-                Citizen
-              </Button>
-              <Button type="button" variant={role === "analyst" ? "default" : "outline"} aria-pressed={role === "analyst"} onClick={() => setRole("analyst")}>
-                Bank employee
-              </Button>
+            <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+              {hasInvite ? "Bank analyst (invited)" : "Citizen account"}
             </div>
+            <FieldDescription>Bank employees join through a verified institution invitation.</FieldDescription>
+            <button
+              type="button"
+              className="text-xs underline underline-offset-4 text-muted-foreground hover:text-foreground"
+              onClick={() => setHasInvite((value) => !value)}
+            >
+              {hasInvite ? "Use a citizen account instead" : "I have an institution invitation"}
+            </button>
           </Field>
-          {role === "analyst" && (
-            <Field>
-              <FieldLabel htmlFor="institution">Institution</FieldLabel>
-              <select
-                id="institution"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={institutionId ?? ""}
-                onChange={(event) => setInstitutionId(event.target.value === "" ? null : Number(event.target.value))}
-                required
-              >
-                <option value="">Select your institution</option>
-                {[0, 1, 2, 3, 4].map((id) => <option key={id} value={id}>Bank {id}</option>)}
-              </select>
-            </Field>
+          {hasInvite && (
+            <>
+              <Field>
+                <FieldLabel htmlFor="inviteCode">Invitation code</FieldLabel>
+                <Input
+                  id="inviteCode"
+                  type="text"
+                  placeholder="Code issued by your institution"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="institutionId">Institution</FieldLabel>
+                <select
+                  id="institutionId"
+                  className="border-input bg-background flex h-9 w-full rounded-md border px-3 text-sm"
+                  value={institutionId}
+                  onChange={(e) => setInstitutionId(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>Select your institution</option>
+                  {[0, 1, 2, 3, 4].map((id) => (
+                    <option key={id} value={id}>Bank {id}</option>
+                  ))}
+                </select>
+                <FieldDescription>Analysts only see data scoped to their own institution.</FieldDescription>
+              </Field>
+            </>
           )}
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>

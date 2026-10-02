@@ -99,41 +99,77 @@ export default function NetworkGraph({
 
   const pushLog = useCallback((t) => setLogs((p) => [...p.slice(-18), t]), []);
 
-  // Initial load
+  const authHeaders = useCallback(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
+
+  // Initial load — fetch-based SSE so the Authorization header can be sent.
   useEffect(() => {
     if (useStreaming) {
       const streamUrl = apiUrl.replace(/\/graph$/, "/graph/stream");
-      const es = new EventSource(streamUrl);
+      const controller = new AbortController();
+      setLoading(true);
+      setError(null);
 
-      es.onopen = () => {
-        setLoading(true);
-        setError(null);
-      };
-
-      es.addEventListener("status", (e) => {
-        const msg = e.data.replace(/^"|"$/g, "");
-        setThinkingStatus(msg);
-        pushLog(`... ${msg}`);
-      });
-
-      es.onmessage = (e) => {
+      (async () => {
         try {
-          const data = JSON.parse(e.data);
-          setGraphData(data);
-          setLastUpdate(new Date(data.timestamp).toLocaleTimeString());
-          setLoading(false);
-          setThinkingStatus(null);
-        } catch {
-          setError("Invalid data received");
+          const res = await fetch(streamUrl, {
+            headers: authHeaders(),
+            signal: controller.signal,
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let currentEvent = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                currentEvent = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                const payload = line.slice(6);
+                if (currentEvent === "status") {
+                  const msg = payload.replace(/^"|"$/g, "");
+                  setThinkingStatus(msg);
+                  pushLog(`... ${msg}`);
+                } else if (currentEvent === "error") {
+                  setError(payload.replace(/^"|"$/g, ""));
+                } else {
+                  try {
+                    const data = JSON.parse(payload);
+                    if (data && Array.isArray(data.nodes)) {
+                      setGraphData(data);
+                      setLastUpdate(new Date(data.timestamp).toLocaleTimeString());
+                      setLoading(false);
+                      setThinkingStatus(null);
+                    }
+                  } catch {
+                    /* keep-alive / partial frame */
+                  }
+                }
+              } else if (!line.trim()) {
+                currentEvent = "";
+              }
+            }
+          }
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            setError(err.message);
+            setLoading(false);
+          }
         }
-      };
+      })();
 
-      es.onerror = () => setError("Connection lost - reconnecting...");
-
-      return () => es.close();
+      return () => controller.abort();
     } else {
       setLoading(true);
-      fetch(apiUrl)
+      fetch(apiUrl, { headers: authHeaders() })
         .then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json();
@@ -148,7 +184,7 @@ export default function NetworkGraph({
           setLoading(false);
         });
     }
-  }, [apiUrl, useStreaming, pushLog]);
+  }, [apiUrl, useStreaming, pushLog, authHeaders]);
 
   // D3 initialization
   useEffect(() => {
@@ -396,7 +432,7 @@ export default function NetworkGraph({
       if (!term.trim()) {
         setLoading(true);
         try {
-          const res = await fetch(apiUrl);
+          const res = await fetch(apiUrl, { headers: authHeaders() });
           const data = await res.json();
           setGraphData(data);
           setLastUpdate(new Date().toLocaleTimeString());
@@ -415,7 +451,7 @@ export default function NetworkGraph({
       try {
         const res = await fetch(searchUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ term }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -434,7 +470,7 @@ export default function NetworkGraph({
         pushLog(`> ERROR: ${err.message}`);
       }
     },
-    [apiUrl, pushLog],
+    [apiUrl, pushLog, authHeaders],
   );
 
   // Debounced search

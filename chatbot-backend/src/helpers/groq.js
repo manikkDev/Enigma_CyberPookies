@@ -3,16 +3,19 @@ import fetch from "node-fetch";
 import env from "../config/env.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
+// llama-3.1-8b-instant was decommissioned by Groq (HTTP 404 model_not_found);
+// gpt-oss-20b is the supported fast/reasoning-effort-capable replacement.
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
 
 // Constants for layout and styling
 const LAYOUT = {
     START_X: 400,
     START_Y: 100,
-    NODE_WIDTH: 200,
+    NODE_WIDTH: 200,   // column slot width; shapes are centered in the slot
     NODE_HEIGHT: 90,
-    VERTICAL_SPACING: 150,
-    HORIZONTAL_SPACING: 250,
+    MAX_NODE_WIDTH: 280,
+    VERTICAL_SPACING: 200, // must exceed the tallest node + channel clearance
+    HORIZONTAL_SPACING: 320, // must exceed MAX_NODE_WIDTH so columns never overlap
 };
 
 const COLORS = {
@@ -21,6 +24,75 @@ const COLORS = {
     DECISION: "#fff7ed",  // orange-50
     STROKE: "#0f172a",    // slate-900
 };
+
+// Right-side gutter offset used for back-edges / multi-level edges so the
+// polyline travels outside all node bounds instead of crossing them.
+const GUTTER_PAD = 60;
+// Extra vertical room below a row for same-level edge dips.
+const ROW_DIP = 30;
+
+function nodeBox(node) {
+    const left = node.x + (LAYOUT.NODE_WIDTH - node._w) / 2;
+    return {
+        left,
+        right: left + node._w,
+        top: node.y,
+        bottom: node.y + node._h,
+        cx: left + node._w / 2,
+        cy: node.y + node._h / 2,
+    };
+}
+
+/**
+ * Route an edge as an orthogonal polyline that never passes through a node:
+ * - Adjacent-level forward edge: elbow through the empty band between rows.
+ * - Same-level edge: dip below the row.
+ * - Back edge or multi-level skip: travel along a right-side gutter clear of
+ *   every node, entering the target's right side.
+ * Returns absolute [x, y] points.
+ */
+function routeEdge(source, target, layoutNodes) {
+    const s = nodeBox(source);
+    const t = nodeBox(target);
+    const sLevel = source._level ?? 0;
+    const tLevel = target._level ?? 0;
+
+    if (tLevel === sLevel + 1) {
+        // Forward edge to the row directly below: exit bottom-center, travel
+        // in the gap between the rows, enter top-center.
+        const midY = s.bottom + Math.min((t.top - s.bottom) / 2, 40);
+        if (Math.abs(s.cx - t.cx) < 1) {
+            return [[s.cx, s.bottom], [t.cx, t.top]];
+        }
+        return [
+            [s.cx, s.bottom],
+            [s.cx, midY],
+            [t.cx, midY],
+            [t.cx, t.top],
+        ];
+    }
+
+    if (tLevel === sLevel) {
+        // Same row: exit bottom, dip below the row, enter target bottom.
+        const dipY = Math.max(s.bottom, t.bottom) + ROW_DIP;
+        return [
+            [s.cx, s.bottom],
+            [s.cx, dipY],
+            [t.cx, dipY],
+            [t.cx, t.bottom],
+        ];
+    }
+
+    // Back edge (upward) or multi-level skip: route around the right gutter.
+    const maxRight = Math.max(...layoutNodes.map(n => nodeBox(n).right));
+    const gutterX = maxRight + GUTTER_PAD;
+    return [
+        [s.right, s.cy],
+        [gutterX, s.cy],
+        [gutterX, t.cy],
+        [t.right, t.cy],
+    ];
+}
 
 
 /**
@@ -69,6 +141,11 @@ function calculateLayout(nodes) {
         });
     }
 
+    const nodeLevel = new Map();
+    levels.forEach((levelNodes, levelIndex) => {
+        levelNodes.forEach(id => nodeLevel.set(id, levelIndex));
+    });
+
     // 3. Assign Coordinates
     // Center alignment strategy
     const layoutNodes = [];
@@ -83,6 +160,7 @@ function calculateLayout(nodes) {
                 ...node,
                 x: startX + (idx * LAYOUT.HORIZONTAL_SPACING),
                 y: LAYOUT.START_Y + (levelIndex * LAYOUT.VERTICAL_SPACING),
+                _level: levelIndex,
             });
         });
     });
@@ -121,7 +199,7 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
          - "start"/"end": Use for entry/exit points (Oval shape).
          - "decision": Use for branching logic (Diamond shape).
          - "process": Use for actions/steps (Rectangle shape).
-    3. 'label': Short text to display in the box.
+    3. 'label': Short text to display in the box. MAX 6 words / 40 characters — use a verb-first phrase (e.g., "Score transactions"). NEVER put full sentences or metric dumps in labels.
     4. 'next': Array of IDs that this node connects TO.
     
     EXAMPLE OUTPUT:
@@ -154,6 +232,7 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
                 ],
                 temperature: 0.1,
                 max_tokens: 4000,
+                reasoning_effort: "low",
                 response_format: { type: "json_object" },
             }),
         });
@@ -170,13 +249,32 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
         // 1. Calculate Positions
         const layoutNodes = calculateLayout(parsed.nodes);
 
-        // 2. Convert to Excalidraw Elements
+        // 2. Pre-compute every node's size so edge routing knows all bounds
+        layoutNodes.forEach(node => {
+            const label = String(node.label || "");
+            const isDecision = node.type === "decision";
+            const isTerminal = node.type === "start" || node.type === "end";
+
+            const nodeWidth = Math.min(
+                LAYOUT.MAX_NODE_WIDTH,
+                Math.max(LAYOUT.NODE_WIDTH, 130 + label.length * 5),
+            );
+            const estLines = Math.max(1, Math.ceil(label.length / Math.max(1, (nodeWidth - 30) / 8)));
+            let nodeHeight = Math.max(LAYOUT.NODE_HEIGHT, 46 + estLines * 22);
+            if (isDecision) nodeHeight = Math.max(110, nodeWidth * 0.45);
+            if (isTerminal) nodeHeight = Math.max(80, nodeHeight * 0.8);
+            node._w = nodeWidth;
+            node._h = nodeHeight;
+        });
+
+        // 3. Convert to Excalidraw Elements
         const elements = [];
 
         layoutNodes.forEach(node => {
             // -- SHAPE --
             const shapeId = node.id;
             const textId = `${node.id}-text`;
+            const label = String(node.label || "");
 
             let excalidrawType = "rectangle";
             let bgColor = COLORS.PROCESS;
@@ -189,6 +287,9 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
                 excalidrawType = "ellipse";
                 bgColor = COLORS.START_END;
             }
+
+            const nodeWidth = node._w;
+            const nodeHeight = node._h;
 
             // Common defaults for all elements
             const commonProps = {
@@ -210,31 +311,31 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
                 seed: Math.floor(Math.random() * 100000),
             };
 
-            // Push Shape
+            // Push Shape (center horizontally in its slot since widths now vary)
             elements.push({
                 ...commonProps,
                 id: shapeId,
                 type: excalidrawType,
-                x: node.x,
+                x: node.x + (LAYOUT.NODE_WIDTH - nodeWidth) / 2,
                 y: node.y,
-                width: LAYOUT.NODE_WIDTH,
-                height: LAYOUT.NODE_HEIGHT,
+                width: nodeWidth,
+                height: nodeHeight,
                 backgroundColor: bgColor,
                 roundness: roundness,
                 boundElements: [{ id: textId, type: "text" }], // Bind text to shape
             });
 
-            // Push Text
+            // Push Text (fills the container so Excalidraw wraps it)
             elements.push({
                 ...commonProps,
                 id: textId,
                 type: "text",
-                x: node.x + 10,
-                y: node.y + 35, // rough vertical center
-                width: LAYOUT.NODE_WIDTH - 20,
-                height: 25,
-                text: node.label || "",
-                fontSize: 16,
+                x: node.x + (LAYOUT.NODE_WIDTH - nodeWidth) / 2 + 10,
+                y: node.y + 10,
+                width: nodeWidth - 20,
+                height: nodeHeight - 20,
+                text: label,
+                fontSize: 15,
                 fontFamily: 1,
                 textAlign: "center",
                 verticalAlign: "middle",
@@ -245,33 +346,38 @@ export async function generateExcalidrawFlowchart(prompt, options = {}) {
                 roughness: 0,
             });
 
-            // Push Arrows (Edges)
+            // Push Arrows (Edges) — orthogonal polylines routed through the
+            // empty bands between rows / the side gutter so they never cross
+            // a node body.
             if (node.next && Array.isArray(node.next)) {
-                node.next.forEach((targetId, i) => {
-                    // Find target coordinates
+                node.next.forEach((targetId) => {
                     const targetNode = layoutNodes.find(n => n.id === targetId);
-                    if (targetNode) {
-                        // Calculate dimensions based on points
-                        const dx = targetNode.x - node.x;
-                        const dy = targetNode.y - node.y - LAYOUT.NODE_HEIGHT;
+                    if (!targetNode || targetId === node.id) return;
 
-                        elements.push({
-                            ...commonProps,
-                            id: `${node.id}-to-${targetId}`,
-                            type: "arrow",
-                            x: node.x + (LAYOUT.NODE_WIDTH / 2),
-                            y: node.y + LAYOUT.NODE_HEIGHT,
-                            width: Math.abs(dx),
-                            height: Math.abs(dy),
-                            backgroundColor: "transparent",
-                            roundness: { type: 2 },
-                            boundElements: [], // Arrows usually don't have bound elements initially here
-                            points: [[0, 0], [dx, dy]],
-                            startBinding: { elementId: shapeId, focus: 0.5, gap: 4 },
-                            endBinding: { elementId: targetId, focus: 0.5, gap: 4 },
-                            endArrowhead: "arrow"
-                        });
-                    }
+                    const pts = routeEdge(node, targetNode, layoutNodes);
+                    const xs = pts.map(p => p[0]);
+                    const ys = pts.map(p => p[1]);
+                    const minX = Math.min(...xs);
+                    const minY = Math.min(...ys);
+                    const maxX = Math.max(...xs);
+                    const maxY = Math.max(...ys);
+
+                    elements.push({
+                        ...commonProps,
+                        id: `${node.id}-to-${targetId}`,
+                        type: "arrow",
+                        x: minX,
+                        y: minY,
+                        width: Math.max(maxX - minX, 1),
+                        height: Math.max(maxY - minY, 1),
+                        backgroundColor: "transparent",
+                        roundness: { type: 2 },
+                        boundElements: [],
+                        points: pts.map(([px, py]) => [px - minX, py - minY]),
+                        startBinding: null,
+                        endBinding: null,
+                        endArrowhead: "arrow",
+                    });
                 });
             }
         });

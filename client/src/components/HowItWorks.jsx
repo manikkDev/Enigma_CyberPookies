@@ -5,20 +5,20 @@ const steps = [
   {
     num: "01",
     title: "Partition",
-    subtitle: "Real data, five institutions",
-    body: "5.7M real transactions (PaySim, SHA-256 verified) are partitioned across five simulated banks. Customer IDs are pseudonymised with a keyed hash before anything else touches them.",
+    subtitle: "Versioned research data, five institutions",
+    body: "5.7M PaySim transactions — synthetic data calibrated from aggregated mobile-money patterns — are checksum-verified and partitioned across five simulated banks. Customer IDs are pseudonymised with a keyed hash.",
   },
   {
     num: "02",
-    title: "Train locally",
-    subtitle: "Each bank, on its own data",
-    body: "Every institution runs local epochs inside its own boundary. Raw customer rows never leave — only clipped model weight updates are produced for aggregation.",
+    title: "Train by partition",
+    subtitle: "Current benchmark, target isolation",
+    body: "The research runner executes local optimization for each partition and aggregates parameter deltas. Separate institution processes and coordinator-inaccessible storage are required before production privacy claims.",
   },
   {
     num: "03",
     title: "Aggregate",
-    subtitle: "Secure aggregation + DP noise",
-    body: "Pairwise masks mean the server only ever sees the sum of updates, never an individual bank's. Optional differential privacy adds calibrated noise with a reported ε budget.",
+    subtitle: "Aggregation privacy research",
+    body: "The current prototype measures institution-update clipping and differential privacy. Its pairwise-mask path is an explicitly labelled SecAgg simulation while the production protocol is being integrated.",
   },
   {
     num: "04",

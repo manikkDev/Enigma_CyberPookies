@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { motion } from "framer-motion"
-import { Ban, ChevronRight, Code2, Download, ExternalLink, Facebook, Globe, Image as ImageIcon, Instagram, Linkedin, Loader2, Sparkles, Terminal, Twitter, Youtube } from "lucide-react"
+import { Ban, ChevronRight, Code2, Download, ExternalLink, Facebook, Globe, Image as ImageIcon, Instagram, Linkedin, Loader2, Network, ShieldCheck, Sparkles, Terminal, Twitter, Youtube } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -383,12 +383,12 @@ export interface Message {
     type: 'excalidraw'
     version: number
     source: string
-    elements: any[]
+    elements: Array<Record<string, unknown>>
     appState: {
       gridSize: number | null
       viewBackgroundColor: string
     }
-    files: Record<string, any>
+    files: Record<string, unknown>
   }> | null
   /** ML schema payload (P1–P6) from parallel ml-generate; rendered as nodes/edges graph */
   mlPayload?: Record<string, unknown> | null
@@ -396,6 +396,34 @@ export interface Message {
   mlSampleId?: string | null
   /** Classifier result: best pattern and scores 0–10 (threshold 0.75) */
   classificationResponse?: unknown
+  /** Authorized copilot tool results grounding the response */
+  toolEvidence?: Array<{
+    tool?: string
+    label?: string
+    ok?: boolean
+    summary?: string
+    evidence_id?: string
+  }> | null
+  /** Neo4j graph data streamed via the `graph` SSE event */
+  graphData?:
+    | {
+        kind: "neighborhood"
+        center: string
+        neighbors: Array<{
+          id: string
+          score?: number | null
+          band?: string | null
+          n_tx?: number | null
+          total_amt?: number | null
+        }>
+      }
+    | {
+        kind: "ring"
+        label?: string
+        nodes: Array<{ id: string; score?: number | null; band?: string | null }>
+        edges: Array<{ source: string; target: string; n_tx?: number | null }>
+      }
+    | null
 }
 
 export interface ImageResult {
@@ -428,6 +456,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   toolInvocations,
   parts,
   sources,
+  toolEvidence,
   promptTitle,
   isComplete,
   codeSnippets,
@@ -437,6 +466,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   mlPattern,
   mlSampleId,
   classificationResponse,
+  graphData,
 }) => {
   const files = useMemo(() => {
     return experimental_attachments?.map((attachment) => {
@@ -997,6 +1027,40 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </div>
           </motion.div>
         )}
+        {toolEvidence && toolEvidence.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mt-6 pt-4 border-t border-border/40 relative z-10"
+          >
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                <ShieldCheck className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="text-xs font-semibold text-foreground">Verified platform evidence</h3>
+              <span className="flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-emerald-500/10 px-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                {toolEvidence.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {toolEvidence.map((ev, index) => (
+                <div
+                  key={index}
+                  className="flex items-start gap-2.5 p-2.5 rounded-xl border border-border/40 bg-background/40"
+                  title={ev?.evidence_id ? `evidence: ${ev.evidence_id}` : undefined}
+                >
+                  <div className={`mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${ev?.ok ? "bg-emerald-500" : "bg-amber-500"}`} />
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium text-foreground truncate">{ev?.label || ev?.tool || "Evidence"}</div>
+                    <div className="text-[10px] text-muted-foreground line-clamp-2">{ev?.summary}</div>
+                    {ev?.evidence_id && <div className="text-[9px] font-mono text-muted-foreground/60 truncate mt-0.5">{ev.evidence_id}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
         {sources && sources.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1087,6 +1151,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             ))}
           </div>
         )}
+        {graphData && <InlineGraph data={graphData} />}
         {mlPayload && typeof mlPayload === "object" && Object.keys(mlPayload).length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -1572,6 +1637,104 @@ function ToolCall({
             return null
         }
       })}
+    </div>
+  )
+}
+
+const BAND_COLORS: Record<string, string> = {
+  high: "#fb7185",
+  medium: "#fbbf24",
+  low: "#34d399",
+}
+
+type GraphDataProp = NonNullable<ChatMessageProps["graphData"]>
+
+/** Inline mini-graph for Neo4j data streamed into the chat — either an
+ *  account neighborhood (radial) or a fraud-ring subgraph (nodes + edges). */
+function InlineGraph({ data }: { data: GraphDataProp }) {
+  const size = 340
+  const cx = size / 2
+  const cy = size / 2
+  const radius = 115
+
+  if (data.kind === "neighborhood") {
+    const shown = data.neighbors.slice(0, 20)
+    if (!shown.length) return null
+    return (
+      <GraphShell title={`Neo4j neighborhood — ${String(data.center).slice(0, 14)}…`} count={`${shown.length} linked counterparties`}>
+        {shown.map((n, i) => {
+          const angle = (i / shown.length) * Math.PI * 2 - Math.PI / 2
+          const x = cx + radius * Math.cos(angle)
+          const y = cy + radius * Math.sin(angle)
+          const color = BAND_COLORS[n.band || "low"] || BAND_COLORS.low
+          return (
+            <g key={n.id}>
+              <line x1={cx} y1={cy} x2={x} y2={y} stroke="#64748b" strokeOpacity={0.4} strokeWidth={1} />
+              <circle cx={x} cy={y} r={n.band === "high" ? 8 : n.band === "medium" ? 6 : 5} fill={color} fillOpacity={0.9} />
+              <text x={x} y={y - 12} textAnchor="middle" fontSize={7} fill="#94a3b8" fontFamily="monospace">
+                {String(n.id).slice(0, 8)}…
+              </text>
+            </g>
+          )
+        })}
+        <circle cx={cx} cy={cy} r={11} fill="#6aa9ff" stroke="#fff" strokeWidth={1.5} />
+        <text x={cx} y={cy + 24} textAnchor="middle" fontSize={8} fill="#e2e8f0" fontFamily="monospace">
+          {String(data.center).slice(0, 12)}…
+        </text>
+      </GraphShell>
+    )
+  }
+
+  // kind === "ring" — fraud-ring subgraph laid out on a circle
+  const shown = data.nodes.slice(0, 24)
+  if (!shown.length) return null
+  const pos = new Map<string, { x: number; y: number }>()
+  shown.forEach((n, i) => {
+    const angle = (i / shown.length) * Math.PI * 2 - Math.PI / 2
+    pos.set(n.id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) })
+  })
+  const visibleEdges = data.edges.filter((e) => pos.has(e.source) && pos.has(e.target))
+
+  return (
+    <GraphShell title={`Fraud ring — ${data.label || "campaign"}`} count={`${shown.length} accounts · ${visibleEdges.length} transfer edges`}>
+      {visibleEdges.map((e, i) => {
+        const s = pos.get(e.source)!
+        const t = pos.get(e.target)!
+        return <line key={i} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="#64748b" strokeOpacity={0.45} strokeWidth={1} />
+      })}
+      {shown.map((n) => {
+        const p = pos.get(n.id)!
+        const color = BAND_COLORS[n.band || "low"] || BAND_COLORS.low
+        return (
+          <g key={n.id}>
+            <circle cx={p.x} cy={p.y} r={n.band === "high" ? 8 : n.band === "medium" ? 6 : 5} fill={color} fillOpacity={0.9} />
+            <text x={p.x} y={p.y - 12} textAnchor="middle" fontSize={7} fill="#94a3b8" fontFamily="monospace">
+              {String(n.id).slice(0, 8)}…
+            </text>
+          </g>
+        )
+      })}
+    </GraphShell>
+  )
+}
+
+function GraphShell({ title, count, children }: { title: string; count: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-border/50 bg-slate-950">
+      <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        <Network className="h-3.5 w-3.5" />
+        {title}
+      </div>
+      <svg viewBox="0 0 340 340" className="h-auto w-full">{children}</svg>
+      <div className="flex gap-4 border-t border-border/40 px-4 py-2 text-[10px] text-muted-foreground">
+        {(["high", "medium", "low"] as const).map((b) => (
+          <span key={b} className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: BAND_COLORS[b] }} />
+            {b}
+          </span>
+        ))}
+        <span className="ml-auto">{count}</span>
+      </div>
     </div>
   )
 }

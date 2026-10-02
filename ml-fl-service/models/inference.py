@@ -46,8 +46,12 @@ def resolve_run(run_id=None):
 
 def _predict_proba(matrix, archive):
     from models.calibrate import apply_temperature
-    from models.torch_mlp import build_model, predict_logits, unpack_state
-    model = unpack_state(build_model(matrix.shape[1]), archive["params"])
+    from models.torch_mlp import build_model, predict_logits, unpack_legacy_state, unpack_state
+    if "model_architecture" in archive.files:
+        architecture = str(archive["model_architecture"].item())
+        model = unpack_state(build_model(matrix.shape[1], architecture=architecture), archive["params"])
+    else:
+        model = unpack_legacy_state(build_model(matrix.shape[1], architecture="legacy_mlp_v1"), archive["params"])
     logits = predict_logits(model, matrix)
     temperature = float(archive["temperature"]) if "temperature" in archive.files else 1.0
     return apply_temperature(logits, temperature)
@@ -104,11 +108,33 @@ def customer_sample(run_id=None, dataset="paysim_banks", n=50, client_id=None):
         frame = frame[frame[schema.client_col] == int(client_id)]
     frame = frame.sample(min(int(n), len(frame)), random_state=17).reset_index(drop=True)
     scored = score_frame(frame, run_id, dataset, explain=False)
-    columns = [schema.id_col, schema.client_col, schema.target, "amount", "type", "hour", "amt_to_bal_ratio"]
+    columns = [schema.id_col, schema.client_col, "amount", "type", "hour", "amt_to_bal_ratio"]
     rows = frame[columns].to_dict("records")
     for row, score, probability, band in zip(rows, scored["risk_scores"], scored["scores"], scored["risk_band"]):
         row.update({"score": score, "probability": probability, "risk_band": band})
     return {"run_id": scored["run_id"], "rows": rows}
+
+
+def customer_detail(customer_id, run_id=None, dataset="paysim_banks", client_id=None):
+    schema = SCHEMAS[dataset]
+    frame = test_frame(dataset)
+    if client_id is not None:
+        frame = frame[frame[schema.client_col] == int(client_id)]
+    account_rows = frame[frame[schema.id_col] == str(customer_id)].copy()
+    if account_rows.empty:
+        raise LookupError("Customer was not found in the authorized institution scope")
+    scored_all = score_frame(account_rows, run_id, dataset, explain=False)
+    peak = int(np.argmax(scored_all["risk_scores"]))
+    row = account_rows.iloc[[peak]].copy()
+    scored = score_frame(row, run_id, dataset, explain=True)
+    visible = [schema.id_col, schema.client_col, "amount", "type", "hour", "amt_to_bal_ratio",
+               "oldbalanceOrg", "oldbalanceDest", "orig_tx_count_24", "orig_amt_sum_24"]
+    transaction = row[[column for column in visible if column in row.columns]].iloc[0].to_dict()
+    transaction.update({"score": scored["risk_scores"][0], "probability": scored["scores"][0],
+                        "risk_band": scored["risk_band"][0]})
+    return {"run_id": scored["run_id"], "customer_id": str(customer_id), "transaction": transaction,
+            "transactions_reviewed": int(len(account_rows)), "explanation": scored["explanations"][0],
+            "explanation_method": scored["explanation_method"]}
 
 
 def citizen_profile(customer_ref, run_id=None, dataset="paysim_banks"):

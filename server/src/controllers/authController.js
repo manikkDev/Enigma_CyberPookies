@@ -1,5 +1,15 @@
+import crypto from 'crypto';
 import User from '../models/User.js';
 import { signToken } from '../utils/jwt.js';
+
+const INVITE_CODE = process.env.ANALYST_INVITE_CODE || '';
+
+const inviteCodeMatches = (provided) => {
+    if (!INVITE_CODE || typeof provided !== 'string' || !provided) return false;
+    const expected = Buffer.from(INVITE_CODE);
+    const actual = Buffer.from(provided);
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+};
 
 const generateToken = (user) => {
     return signToken(
@@ -22,17 +32,24 @@ const userResponse = (user) => ({
 // @access  Public
 export const signupUser = async (req, res) => {
     try {
-        const { name, email, password, role = 'citizen', institutionId = null } = req.body;
+        const { name, email, password, role = 'citizen', inviteCode, institutionId } = req.body;
 
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Please provide all required fields' });
         }
-        if (!['citizen', 'analyst'].includes(role)) {
-            return res.status(400).json({ message: 'Role must be citizen or analyst' });
-        }
-        const normalizedInstitutionId = role === 'analyst' ? Number(institutionId) : null;
-        if (role === 'analyst' && (!Number.isInteger(normalizedInstitutionId) || normalizedInstitutionId < 0 || normalizedInstitutionId > 4)) {
-            return res.status(400).json({ message: 'Bank employees must select an institution from 0 to 4' });
+        let normalizedInstitutionId = null;
+        if (role === 'analyst') {
+            // Invite-only: analysts are provisioned with an institution-issued code.
+            if (!inviteCodeMatches(inviteCode)) {
+                return res.status(403).json({ message: 'Bank employee accounts require a valid institution invitation code' });
+            }
+            const institution = Number(institutionId);
+            if (!Number.isInteger(institution) || institution < 0 || institution > 4) {
+                return res.status(400).json({ message: 'A valid institution (0-4) is required for analyst accounts' });
+            }
+            normalizedInstitutionId = institution;
+        } else if (role !== 'citizen') {
+            return res.status(403).json({ message: 'Bank employee accounts require an institution invitation' });
         }
 
         const userExists = await User.findOne({ email });
@@ -74,6 +91,9 @@ export const loginUser = async (req, res) => {
 
         const user = await User.findOne({ email });
 
+        if (user?.erasedAt) {
+            return res.status(403).json({ message: 'This account was erased under a data-rights request' });
+        }
         if (user && (await user.matchPassword(password))) {
             res.json({
                 user: userResponse(user),

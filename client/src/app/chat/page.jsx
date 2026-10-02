@@ -24,9 +24,10 @@ import {
   Link as LinkIcon,
   Radio,
   DollarSign,
+  Network,
 } from "lucide-react"
 import { SuggestionDropdown } from "@/components/ui/suggestion-dropdown"
-import { fuzzySearch } from "@/services/suggestions/fuzzy"
+import { riskFuzzySearch, defaultSuggestions } from "@/services/suggestions/riskSuggestions"
 import Image from "next/image"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { FeedbackDialog } from "@/components/ui/feedback-dialog"
@@ -38,7 +39,6 @@ import { SERVER_URL_1, SERVER_URL } from "@/utils/commonHelper"
 
 // Call chatbot backend (5001) and other services directly — no Next.js API proxy
 const CHAT_API_BASE = `${SERVER_URL_1}/api/chat`
-const CHARTS_ENDPOINT = `${SERVER_URL}/api/gemini/charts`
 
 function normalizeImageResults(raw) {
   if (!Array.isArray(raw)) return undefined
@@ -314,6 +314,14 @@ function ChatPageContent() {
   const [activeModeBadge, setActiveModeBadge] = useState(null)
   const [analysisContext, setAnalysisContext] = useState(null)
 
+  useEffect(() => {
+    if (!user) return
+    const mode = user.role === "analyst" || user.role === "admin" ? "risk_analyst" : "risk_citizen"
+    setInvestigationMode(mode)
+    setIncludeYouTube(false)
+    setIncludeImageSearch(false)
+  }, [user])
+
   // Consume analysis context from sessionStorage when arriving from analyze page
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -475,6 +483,7 @@ function ChatPageContent() {
         ? message.charts.filter((url) => typeof url === "string" && url.trim().length > 0)
         : typeof message?.charts === "string" && message.charts.trim().length > 0 ? [message.charts] : undefined,
       excalidrawData: message.excalidraw ?? message.excalidraw_data ?? message.excalidrawData ?? undefined,
+      graphData: message.graph ?? message.graphData ?? undefined,
       images: normalizeImageResults(message?.images),
       videos: normalizedVideos,
       socialProfiles: normalizeSocialProfiles(message?.socialProfiles ?? message?.socials),
@@ -537,8 +546,8 @@ function ChatPageContent() {
 
   const filteredSuggestions = useMemo(() => {
     if (!input || input.trim().length < 2) return []
-    return fuzzySearch(input).slice(0, 5)
-  }, [input])
+    return riskFuzzySearch(input, investigationMode).slice(0, 5)
+  }, [input, investigationMode])
 
   const filteredHistory = useMemo(() => {
     if (!historyQuery.trim()) return conversations
@@ -573,7 +582,7 @@ function ChatPageContent() {
       if (attachments && attachments.length > 0) {
         const formData = new FormData()
         formData.append("prompt", userContent)
-        formData.append("options", JSON.stringify({ includeYouTube, includeImageSearch }))
+        formData.append("options", JSON.stringify({ includeYouTube, includeImageSearch, investigationMode, analysisContext: analysisContext || undefined }))
         Array.from(attachments).forEach((file) => formData.append("files", file, file.name))
         response = await fetch(`${CHAT_API_BASE}/stream`, {
           method: "POST",
@@ -593,7 +602,7 @@ function ChatPageContent() {
       const classifySample = async (sample, mid) => {
         if (!mid || !sample || typeof sample !== "object") return
         try {
-          const res = await fetch(`${"http://localhost:8000"}/classify`, {
+          const res = await fetch(`${SERVER_URL_1}/api/chat/classify`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ sample }),
@@ -628,6 +637,7 @@ function ChatPageContent() {
       let buffer = ""
       let streamedContent = ""
       let streamedSources = []
+      let streamedEvidence = []
       let streamedImages = []
       let streamedVideos = []
       let streamedCodeSnippets = []
@@ -668,6 +678,9 @@ function ChatPageContent() {
           } else if (currentEvent === "sources" && parsed.sources && Array.isArray(parsed.sources)) {
             streamedSources = parsed.sources
             setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, sources: streamedSources } : msg))
+          } else if (currentEvent === "evidence" && Array.isArray(parsed.evidence ?? parsed.results)) {
+            streamedEvidence = parsed.evidence ?? parsed.results
+            setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, toolEvidence: streamedEvidence } : msg))
           } else if (currentEvent === "mlSchema") {
             const payload = parsed?.payload ?? parsed
             const pattern = typeof parsed?.pattern === "string" ? parsed.pattern : undefined
@@ -701,6 +714,8 @@ function ChatPageContent() {
               streamedVideos = normalizedVideos
               setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, videos: normalizedVideos } : msg))
             }
+          } else if (currentEvent === "graph" && parsed.graph) {
+            setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, graphData: parsed.graph } : msg))
           } else if (currentEvent === "excalidraw" && parsed.excalidrawData && Array.isArray(parsed.excalidrawData)) {
             setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, excalidrawData: parsed.excalidrawData } : msg))
           } else if (currentEvent === "finish" && parsed.finishReason) {
@@ -736,37 +751,13 @@ function ChatPageContent() {
 
       const finalContent = streamedContent || "I couldn't fetch the details. Please try again later."
       setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? {
-        ...msg, content: finalContent, sources: streamedSources, chartUrl: msg.chartUrl, chartUrls: msg.chartUrls ?? [],
+        ...msg, content: finalContent, sources: streamedSources, toolEvidence: streamedEvidence, chartUrl: msg.chartUrl, chartUrls: msg.chartUrls ?? [],
         images: streamedImages.length > 0 ? streamedImages : msg.images, videos: streamedVideos.length > 0 ? streamedVideos : msg.videos,
         codeSnippets: streamedCodeSnippets, executionOutputs: streamedExecutionOutputs, mermaidBlocks: streamedMermaidBlocks, createdAt: new Date(), isComplete: true,
       } : msg))
 
-      const chartsConversationId = resolvedConversationId ?? currentConversationId
-      if (!abortControllerRef.current?.signal.aborted && chartsConversationId) {
-        setAssistantStatuses((prev) => ({ ...prev, charting: "active" }))
-        try {
-          const chartsResponse = await fetch(CHARTS_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: JSON.stringify({ prompt: userContent, conversationId: chartsConversationId, options: { includeSearch: true, includeYouTube } }),
-          })
-          if (chartsResponse.ok) {
-            const chartData = await chartsResponse.json()
-            const chartUrlFromResponse = chartData?.chartUrl || chartData?.charts?.chartUrl
-            if (typeof chartUrlFromResponse === "string" && chartUrlFromResponse.trim().length > 0) {
-              setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? {
-                ...msg, chartUrl: chartUrlFromResponse, chartUrls: Array.from(new Set([...(msg.chartUrls ?? []), chartUrlFromResponse])),
-              } : msg))
-            }
-            setAssistantStatuses((prev) => ({ ...prev, charting: "complete" }))
-          } else {
-            throw new Error(await chartsResponse.text())
-          }
-        } catch (chartErr) {
-          console.error("Chart fetch after chat failed:", chartErr)
-          setAssistantStatuses((prev) => ({ ...prev, charting: "pending" }))
-        }
-      }
+      // Copilot replies are grounded in tool evidence; no post-hoc chart
+      // generation is performed (legacy ungrounded chart call removed).
     } catch (error) {
       if (error.name === "AbortError") return
       console.error("Error in streaming:", error)
@@ -801,7 +792,7 @@ function ChatPageContent() {
     try {
       const formData = new FormData()
       formData.append("audio", audioBlob, "recording.wav")
-      const response = await fetch("/api/speech/transcribe", { method: "POST", body: formData })
+      const response = await fetch(`${SERVER_URL_1}/api/speech/transcribe`, { method: "POST", body: formData })
       if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || "Failed to transcribe audio") }
       const data = await response.json()
       if (data.success && data.text) return data.text
@@ -1316,28 +1307,18 @@ function ChatPageContent() {
               </button>
 
               {/* Investigation mode selector */}
-              <div style={{ position: "relative" }}>
-                <select
-                  value={investigationMode}
-                  onChange={e => setInvestigationMode(e.target.value)}
-                  style={{
-                    height: 32, paddingLeft: 10, paddingRight: 10,
-                    background: "rgba(var(--accent-rgb),0.08)",
-                    border: "1px solid rgba(var(--accent-rgb),0.25)",
-                    borderRadius: 8,
-                    fontFamily: "var(--font-mono)", fontSize: "0.72rem",
-                    color: "rgba(var(--accent-rgb),1)",
-                    cursor: "pointer", outline: "none",
-                  }}
-                >
-                  <option value="copilot">Threat Copilot</option>
-                  <option value="risk_analyst">Risk Copilot — Analyst</option>
-                  <option value="risk_citizen">Risk Copilot — Citizen</option>
-                  <option value="phishing">Phishing / Impersonation</option>
-                  <option value="url">URL / Attachment</option>
-                  <option value="campaigns">Misinformation / Campaigns</option>
-                  <option value="aml">AML / Financial</option>
-                </select>
+              <div
+                style={{
+                  height: 32, paddingLeft: 10, paddingRight: 10,
+                  background: "rgba(var(--accent-rgb),0.08)",
+                  border: "1px solid rgba(var(--accent-rgb),0.25)",
+                  borderRadius: 8,
+                  fontFamily: "var(--font-mono)", fontSize: "0.72rem",
+                  color: "rgba(var(--accent-rgb),1)",
+                  display: "inline-flex", alignItems: "center",
+                }}
+              >
+                {user?.role === "analyst" || user?.role === "admin" ? "Federated Risk Copilot — Analyst" : "Financial Risk Companion — Citizen"}
               </div>
               {activeModeBadge && (
                 <span style={{
@@ -1434,6 +1415,10 @@ function ChatPageContent() {
                 <BookOpen style={{ width: 13, height: 13 }} /> Library
               </button>
 
+              <Link href="/analyst/graph" className="hud-btn">
+                <Network style={{ width: 13, height: 13 }} /> Graph
+              </Link>
+
               <button type="button" className="hud-btn" onClick={() => setIsFeedbackOpen(true)}>
                 <MessageCircle style={{ width: 13, height: 13 }} /> Feedback
               </button>
@@ -1524,7 +1509,7 @@ function ChatPageContent() {
                       <div style={{ position: "relative", zIndex: 1 }}>
                         <div className="welcome-badge">
                           <span className="pulse-dot" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--accent)" }} />
-                          Threat intelligence console online
+                          Privacy-preserving risk copilot online
                         </div>
 
                         <h2 className="welcome-greeting">
@@ -1534,15 +1519,33 @@ function ChatPageContent() {
                         </h2>
 
                         <p className="welcome-sub">
-                          An advanced investigation platform for digital threats, malicious campaigns, and attack infrastructure analysis.
+                          Grounded assistance for federated model evidence, privacy trade-offs, pseudonymous graph intelligence, and customer rights.
                         </p>
 
                         <div className="welcome-pills">
-                          {["Threat detection & scoring", "Attack graph visualization", "Multi-source intelligence"].map((label) => (
+                          {["Run evidence & metrics", "Pseudonymous graph context", "Consent-aware explanations"].map((label) => (
                             <div key={label} className="welcome-pill">
                               <span className="welcome-pill-dot" />
                               {label}
                             </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 20 }}>
+                          {defaultSuggestions(investigationMode).slice(0, 3).map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
+                              style={{
+                                textAlign: "left", fontSize: 13, padding: "10px 14px",
+                                borderRadius: 10, border: "1px solid rgba(var(--accent-rgb),0.25)",
+                                background: "rgba(var(--accent-rgb),0.06)", color: "var(--foreground)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {suggestion}
+                            </button>
                           ))}
                         </div>
                       </div>

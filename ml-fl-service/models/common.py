@@ -22,13 +22,9 @@ def model_columns(schema):
 
 
 def sample_frame(frame, target, maximum, seed=42):
-    if maximum is None or len(frame) <= maximum:
+    if maximum is None or maximum <= 0 or len(frame) <= maximum:
         return frame.reset_index(drop=True)
-    positives = frame[frame[target] == 1]
-    negatives = frame[frame[target] == 0]
-    negative_count = max(1, maximum - len(positives))
-    sampled_negatives = negatives.sample(min(negative_count, len(negatives)), random_state=seed)
-    return pd.concat([positives, sampled_negatives]).sample(frac=1, random_state=seed).reset_index(drop=True)
+    return frame.sample(n=int(maximum), random_state=seed).reset_index(drop=True)
 
 
 def frame_to_matrix(frame, schema, mean=None, scale=None):

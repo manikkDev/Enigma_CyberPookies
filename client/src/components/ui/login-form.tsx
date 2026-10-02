@@ -107,7 +107,20 @@ export function LoginForm({
     try {
       setIsGoogleLoading(true)
       // Ensure Google accounts SDK is available
-      const { google } = window as typeof window & { google?: any }
+      const { google } = window as typeof window & {
+        google?: {
+          accounts?: {
+            oauth2?: {
+              initCodeClient?: (config: {
+                client_id: string
+                scope: string
+                ux_mode: string
+                callback: (response: { code?: string; error?: string }) => void
+              }) => { requestCode: () => void }
+            }
+          }
+        }
+      }
       if (!google || !google.accounts || !google.accounts.oauth2) {
         toast.error("Google SDK not loaded", {
           description: "Please check your network connection and try again.",
@@ -123,7 +136,7 @@ export function LoginForm({
         return
       }
 
-      const client = google.accounts.oauth2.initCodeClient({
+      const client = google.accounts.oauth2.initCodeClient!({
         client_id: googleClientId,
         scope: "openid email profile",
         ux_mode: "popup",

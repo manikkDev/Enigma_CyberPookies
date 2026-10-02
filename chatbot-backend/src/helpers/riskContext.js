@@ -62,10 +62,12 @@ export async function buildRiskContext(req, mode) {
   } else if (mode === "risk_citizen") {
     const profile = await fetchProfile(req);
     const ref = profile?.customerRef || req.user?.id;
-    const [citizen, consentMe] = await Promise.all([
-      ref ? ml.citizen(ref).catch(() => null) : Promise.resolve(null),
-      fetchConsentMe(req),
-    ]);
+    const consentMe = await fetchConsentMe(req);
+    const scoringGranted = consentState(consentMe, "risk_scoring") === "granted";
+    const citizen = scoringGranted && ref ? await ml.citizen(ref).catch(() => null) : null;
+    if (!scoringGranted) {
+      lines.push("- Risk scoring is disabled until the user explicitly grants risk_scoring consent.");
+    }
     if (citizen) {
       lines.push(`- User's risk band: ${citizen.risk_band} (score ${(citizen.score * 100).toFixed(0)}th percentile of scored transactions).`);
       lines.push(`- Top feature contributions: ${(citizen.explanation || []).slice(0, 4).map((e) => `${e.feature.replaceAll("_", " ")} (${e.direction})`).join("; ")}.`);

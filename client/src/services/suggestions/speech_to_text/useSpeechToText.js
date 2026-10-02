@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { SERVER_URL } from "@/utils/commonHelper";
+import { SERVER_URL_1 } from "@/utils/commonHelper";
 
 const useSpeechToText = (onTranscription) => {
   const [isRecording, setIsRecording] = useState(false);
@@ -70,8 +70,8 @@ const useSpeechToText = (onTranscription) => {
       formData.append("audio", audioBlob, "recording.wav");
 
       try {
-        const apiUrl = SERVER_URL
-          ? `${SERVER_URL}/api/speech/transcribe`
+        const apiUrl = SERVER_URL_1
+          ? `${SERVER_URL_1}/api/speech/transcribe`
           : "/api/speech/transcribe";
 
         const response = await fetch(apiUrl, {

@@ -1652,16 +1652,20 @@ type GraphDataProp = NonNullable<ChatMessageProps["graphData"]>
 /** Inline mini-graph for Neo4j data streamed into the chat — either an
  *  account neighborhood (radial) or a fraud-ring subgraph (nodes + edges). */
 function InlineGraph({ data }: { data: GraphDataProp }) {
-  const size = 340
-  const cx = size / 2
-  const cy = size / 2
-  const radius = 115
+  // Compact canvas — scale radius to the node count so small rings don't
+  // render as a nearly-empty box.
+  const nodeCount = data.kind === "neighborhood" ? data.neighbors.length : data.nodes.length
+  const w = 340
+  const radius = Math.min(105, Math.max(48, nodeCount * 9))
+  const h = Math.min(300, Math.max(200, radius * 2 + 90))
+  const cx = w / 2
+  const cy = h / 2
 
   if (data.kind === "neighborhood") {
     const shown = data.neighbors.slice(0, 20)
     if (!shown.length) return null
     return (
-      <GraphShell title={`Neo4j neighborhood — ${String(data.center).slice(0, 14)}…`} count={`${shown.length} linked counterparties`}>
+      <GraphShell title={`Neo4j neighborhood — ${String(data.center).slice(0, 14)}…`} count={`${shown.length} linked counterparties`} w={w} h={h}>
         {shown.map((n, i) => {
           const angle = (i / shown.length) * Math.PI * 2 - Math.PI / 2
           const x = cx + radius * Math.cos(angle)
@@ -1696,7 +1700,7 @@ function InlineGraph({ data }: { data: GraphDataProp }) {
   const visibleEdges = data.edges.filter((e) => pos.has(e.source) && pos.has(e.target))
 
   return (
-    <GraphShell title={`Fraud ring — ${data.label || "campaign"}`} count={`${shown.length} accounts · ${visibleEdges.length} transfer edges`}>
+    <GraphShell title={`Fraud ring — ${data.label || "campaign"}`} count={`${shown.length} accounts · ${visibleEdges.length} transfer edges`} w={w} h={h}>
       {visibleEdges.map((e, i) => {
         const s = pos.get(e.source)!
         const t = pos.get(e.target)!
@@ -1718,14 +1722,17 @@ function InlineGraph({ data }: { data: GraphDataProp }) {
   )
 }
 
-function GraphShell({ title, count, children }: { title: string; count: string; children: React.ReactNode }) {
+function GraphShell({ title, count, w, h, children }: { title: string; count: string; w: number; h: number; children: React.ReactNode }) {
   return (
     <div className="mt-4 overflow-hidden rounded-2xl border border-border/50 bg-slate-950">
       <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         <Network className="h-3.5 w-3.5" />
         {title}
+        <a href="/analyst/graph" className="ml-auto font-semibold normal-case tracking-normal text-sky-400 hover:text-sky-300">
+          Open full graph →
+        </a>
       </div>
-      <svg viewBox="0 0 340 340" className="h-auto w-full">{children}</svg>
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-auto w-full">{children}</svg>
       <div className="flex gap-4 border-t border-border/40 px-4 py-2 text-[10px] text-muted-foreground">
         {(["high", "medium", "low"] as const).map((b) => (
           <span key={b} className="flex items-center gap-1.5">
